@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>나의 그림책 스토리보드 확장판</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=Gaegu:wght@400;700&display=swap');
+
+  :root {
+    --bg: #f5f0e8;
+    --card-bg: #fffdf7;
+    --header-brown: #5c3d1a;
+    --accent-gold: #c49a3c;
+    --accent-red: #a94442;
+    --accent-green: #5a7a3a;
+    --text-dark: #3a2e1e;
+    --text-mid: #6b5d4a;
+    --text-light: #9a8b76;
+    --border: #d4c9b5;
+    --input-bg: #fefcf6;
+    --shadow: 0 2px 12px rgba(92,61,26,0.08);
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: var(--text-dark); min-height: 100vh; }
+
+  .app-header {
+    background: linear-gradient(135deg, var(--header-brown) 0%, #7a5228 100%);
+    color: #fff; padding: 20px 24px; text-align: center;
+    position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 4px 20px rgba(92,61,26,0.2);
+  }
+  .app-header h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 4px; }
+  .app-header .subtitle { font-size: 0.82rem; opacity: 0.85; font-weight: 300; }
+  .container { max-width: 900px; margin: 0 auto; padding: 20px 16px 100px; }
+
+  /* 학생정보 */
+  .student-info { background: var(--card-bg); border-radius: var(--radius); padding: 20px 24px; margin-bottom: 20px; box-shadow: var(--shadow); border: 1px solid var(--border); }
+  .student-info .info-title { font-size: 0.85rem; font-weight: 700; color: var(--header-brown); margin-bottom: 12px; }
+  .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+  .info-field label { display: block; font-size: 0.75rem; color: var(--text-light); margin-bottom: 4px; font-weight: 500; }
+  .info-field input, .info-field select { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem; font-family: 'Gaegu', cursive; font-weight: 700; background: var(--input-bg); color: var(--text-dark); }
+  .info-field input:focus, .info-field select:focus { outline: none; border-color: var(--accent-gold); box-shadow: 0 0 0 3px rgba(196,154,60,0.15); }
+
+  /* 진행률 */
+  .progress-bar { margin-bottom: 16px; background: var(--card-bg); border-radius: var(--radius); padding: 14px 20px; box-shadow: var(--shadow); border: 1px solid var(--border); }
+  .progress-label { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-mid); margin-bottom: 6px; }
+  .progress-track { height: 8px; background: #e8e0d2; border-radius: 4px; overflow: hidden; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent-gold), var(--accent-green)); border-radius: 4px; transition: width 0.4s; width: 0%; }
+
+  /* 페이지 카드 */
+  .pages-container { display: flex; flex-direction: column; gap: 0; }
+  .page-card { background: var(--card-bg); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); border: 1px solid var(--border); animation: fadeIn 0.3s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+
+  .page-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; color: #fff; font-size: 0.85rem; font-weight: 700; }
+  .page-header .left { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .page-header .page-prompt { font-size: 0.72rem; font-weight: 400; background: rgba(255,255,255,0.2); padding: 2px 10px; border-radius: 12px; }
+  .page-header .acts { display: flex; gap: 4px; }
+  .page-header .acts button { background: rgba(255,255,255,0.15); border: none; color: #fff; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; transition: background 0.15s; }
+  .page-header .acts button:hover { background: rgba(255,255,255,0.35); }
+  .page-header .acts button:disabled { opacity: 0.25; cursor: not-allowed; }
+
+  .page-header[data-type="cover"]  { background: #5c3d1a; }
+  .page-header[data-type="start"]  { background: #4a5a2b; }
+  .page-header[data-type="middle"] { background: #8b6914; }
+  .page-header[data-type="climax"] { background: #a94442; }
+  .page-header[data-type="end"]    { background: #2d6a4f; }
+  .page-header[data-type="author"] { background: #4a5a2b; }
+
+  .type-select { padding: 2px 6px; border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; background: rgba(255,255,255,0.15); color: #fff; font-size: 0.7rem; font-family: 'Noto Sans KR'; cursor: pointer; }
+  .type-select option { color: #333; background: #fff; }
+
+  .page-inner { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px; }
+  @media (max-width: 640px) { .page-inner { grid-template-columns: 1fr; } }
+
+  /* 그림 */
+  .drawing-area { width: 100%; aspect-ratio: 4/3; border: 2px dashed var(--border); border-radius: 8px; background: #fff; position: relative; overflow: hidden; cursor: crosshair; }
+  .drawing-area canvas { width: 100%; height: 100%; display: block; }
+  .drawing-area .ph { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); text-align: center; color: var(--text-light); font-size: 0.78rem; pointer-events: none; transition: opacity 0.3s; }
+  .drawing-area .ph.hidden { opacity: 0; }
+  .drawing-area .ph span { font-size: 1.5rem; display: block; margin-bottom: 2px; }
+
+  .dtb { display: flex; gap: 5px; margin-bottom: 8px; flex-wrap: wrap; align-items: center; }
+  .dtb button, .dtb label { padding: 3px 8px; border: 1px solid var(--border); border-radius: 5px; background: var(--input-bg); font-size: 0.7rem; font-family: 'Noto Sans KR'; cursor: pointer; color: var(--text-mid); transition: all 0.15s; display: flex; align-items: center; gap: 2px; }
+  .dtb button:hover, .dtb label:hover { background: var(--accent-gold); color: #fff; border-color: var(--accent-gold); }
+  .dtb button.at { background: var(--header-brown); color: #fff; border-color: var(--header-brown); }
+  .dtb input[type="file"] { display: none; }
+  .dtb input[type="color"] { width: 22px; height: 22px; border: 1px solid var(--border); border-radius: 4px; padding: 0; cursor: pointer; }
+  .dtb input[type="range"] { width: 50px; accent-color: var(--header-brown); }
+
+  .text-side { display: flex; flex-direction: column; }
+  .pg { font-size: 0.78rem; color: var(--text-light); margin-bottom: 6px; font-weight: 500; }
+  .pg.hl { color: var(--accent-red); font-weight: 700; }
+  .ptx { width: 100%; flex: 1; min-height: 80px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; font-family: 'Gaegu', cursive; font-size: 1.05rem; font-weight: 700; line-height: 1.7; background: var(--input-bg); color: var(--text-dark); resize: vertical; }
+  .ptx:focus { outline: none; border-color: var(--accent-gold); box-shadow: 0 0 0 3px rgba(196,154,60,0.15); }
+  .prompt-input { min-height: 32px !important; flex: none !important; margin-bottom: 8px; font-size: 0.85rem !important; }
+
+  /* 장면 추가 버튼 */
+  .add-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 10px; border: 2px dashed transparent; border-radius: 8px; background: transparent; font-family: 'Noto Sans KR'; font-size: 0.8rem; font-weight: 500; color: var(--border); cursor: pointer; transition: all 0.2s; margin: 4px 0; }
+  .add-btn:hover { border-color: var(--accent-gold); color: var(--accent-gold); background: rgba(196,154,60,0.03); }
+  .add-btn .ic { width: 22px; height: 22px; border-radius: 50%; background: var(--border); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 1rem; font-weight: 700; transition: background 0.2s; }
+  .add-btn:hover .ic { background: var(--accent-gold); }
+
+  /* 작가소개 */
+  .author-section { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+  .author-profile { display: flex; gap: 16px; align-items: flex-start; }
+  .author-avatar { width: 70px; height: 70px; border: 2px dashed var(--border); border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; background: #fff; }
+  .author-fields { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+  .af label { font-size: 0.75rem; color: var(--text-light); font-weight: 500; }
+  .af input, .af textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-family: 'Gaegu', cursive; font-size: 1rem; font-weight: 700; background: var(--input-bg); color: var(--text-dark); }
+  .dedication { text-align: center; padding: 12px; background: rgba(196,154,60,0.06); border-radius: 8px; font-size: 0.9rem; }
+  .dedication input { border: none; border-bottom: 2px dashed var(--border); background: transparent; font-family: 'Gaegu', cursive; font-size: 1rem; font-weight: 700; text-align: center; width: 120px; color: var(--text-dark); }
+  .checklist { background: rgba(74,90,43,0.06); border-radius: 8px; padding: 12px 16px; }
+  .checklist h4 { font-size: 0.8rem; color: var(--accent-green); margin-bottom: 8px; }
+  .checklist label { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: var(--text-mid); margin-bottom: 4px; cursor: pointer; }
+  .checklist input[type="checkbox"] { accent-color: var(--accent-green); width: 16px; height: 16px; }
+
+  /* 뱃지 */
+  .badge { display: inline-flex; align-items: center; gap: 6px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 20px; padding: 6px 16px; font-size: 0.8rem; color: var(--text-mid); margin-bottom: 16px; }
+  .badge strong { color: var(--header-brown); }
+
+  /* 하단바 */
+  .action-bar { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(255,253,247,0.95); backdrop-filter: blur(10px); border-top: 1px solid var(--border); padding: 12px 20px; display: flex; justify-content: center; gap: 10px; z-index: 100; flex-wrap: wrap; }
+  .abtn { padding: 10px 20px; border: none; border-radius: 8px; font-family: 'Noto Sans KR'; font-size: 0.85rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
+  .b-pdf { background: var(--accent-red); color: #fff; }
+  .b-json { background: var(--accent-green); color: #fff; }
+  .b-save { background: var(--accent-gold); color: #fff; }
+  .b-load { background: var(--text-mid); color: #fff; }
+
+  /* 토스트, 로딩, 확인 */
+  .toast { position: fixed; top: 80px; left: 50%; transform: translateX(-50%) translateY(-20px); background: var(--header-brown); color: #fff; padding: 12px 24px; border-radius: 8px; font-size: 0.85rem; font-weight: 500; z-index: 1000; opacity: 0; transition: all 0.3s; pointer-events: none; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .lo { position: fixed; top:0;left:0;right:0;bottom:0; background: rgba(0,0,0,0.5); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+  .lo.show { opacity: 1; pointer-events: auto; }
+  .sp { width: 48px; height: 48px; border: 4px solid rgba(255,255,255,0.3); border-top-color: var(--accent-gold); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px; }
+  .lo p { color: #fff; font-weight: 500; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .co { position: fixed; top:0;left:0;right:0;bottom:0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1500; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+  .co.show { opacity: 1; pointer-events: auto; }
+  .cb { background: var(--card-bg); border-radius: 12px; padding: 24px 28px; box-shadow: 0 12px 40px rgba(0,0,0,0.2); text-align: center; max-width: 340px; }
+  .cb p { font-size: 0.95rem; margin-bottom: 6px; font-weight: 700; }
+  .cb .sub { font-size: 0.8rem; color: var(--text-light); margin-bottom: 18px; }
+  .cb .br { display: flex; gap: 10px; justify-content: center; }
+  .cb button { padding: 10px 24px; border: none; border-radius: 8px; font-family: 'Noto Sans KR'; font-size: 0.85rem; font-weight: 700; cursor: pointer; }
+  .cb .bc { background: #e8e0d2; color: var(--text-mid); }
+  .cb .bd { background: var(--accent-red); color: #fff; }
+</style>
+</head>
+<body>
+<div class="toast" id="toast"></div>
+<div class="lo" id="loading"><div class="sp"></div><p>PDF를 생성하고 있어요...</p></div>
+<div class="co" id="cOverlay">
+  <div class="cb">
+    <p id="cMsg">이 장면을 삭제할까요?</p>
+    <div class="sub">삭제하면 그림과 글이 모두 사라져요.</div>
+    <div class="br">
+      <button class="bc" onclick="closeC()">취소</button>
+      <button class="bd" id="cDelBtn">삭제</button>
+    </div>
+  </div>
+</div>
+
+<header class="app-header">
+  <h1>📖 나의 그림책 스토리보드 확장판</h1>
+  <div class="subtitle">남부초등학교 · 6학년 도덕 1단원 「나는 꿈 요리사」 × IB 학습자상 그림책 프로젝트</div>
+</header>
+
+<div class="container">
+  <div class="student-info">
+    <div class="info-title">✏️ 기본 정보</div>
+    <div class="info-grid">
+      <div class="info-field"><label>반</label><input type="text" id="i-class" placeholder="예: 3"></div>
+      <div class="info-field"><label>이름</label><input type="text" id="i-name" placeholder="이름을 써요"></div>
+      <div class="info-field"><label>제목</label><input type="text" id="i-title" placeholder="나의 그림책 제목"></div>
+      <div class="info-field"><label>주인공</label><input type="text" id="i-prot" placeholder="주인공 이름"></div>
+      <div class="info-field">
+        <label>나의 학습자상</label>
+        <select id="i-lp">
+          <option value="">선택하세요</option>
+          <option value="탐구하는 사람">탐구하는 사람</option>
+          <option value="지식이 있는 사람">지식이 있는 사람</option>
+          <option value="사고하는 사람">사고하는 사람</option>
+          <option value="소통하는 사람">소통하는 사람</option>
+          <option value="원칙을 지키는 사람">원칙을 지키는 사람</option>
+          <option value="열린 마음을 가진 사람">열린 마음을 가진 사람</option>
+          <option value="배려하는 사람">배려하는 사람</option>
+          <option value="도전하는 사람">도전하는 사람</option>
+          <option value="균형 잡힌 사람">균형 잡힌 사람</option>
+          <option value="성찰하는 사람">성찰하는 사람</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="progress-bar">
+    <div class="progress-label"><span>스토리보드 진행률</span><span id="pp">0%</span></div>
+    <div class="progress-track"><div class="progress-fill" id="pf"></div></div>
+  </div>
+
+  <div class="badge">📄 전체 <strong id="pc">12</strong>장 (표지 + 이야기 + 작가소개)</div>
+  <div class="pages-container" id="root"></div>
+</div>
+
+<div class="action-bar">
+  <button class="abtn b-save" onclick="saveLocal()">💾 임시저장</button>
+  <button class="abtn b-load" onclick="loadLocal()">📂 불러오기</button>
+  <button class="abtn b-json" onclick="expJSON()">📋 JSON</button>
+  <button class="abtn b-pdf" onclick="expPDF()">📄 PDF</button>
+</div>
+
+<script>
+/* ═══ 타입 정의 ═══ */
+const T={cover:{e:'📕',c:'#5c3d1a',l:'표지'},start:{e:'📖',c:'#4a5a2b',l:'시작'},middle:{e:'✨',c:'#8b6914',l:'중간'},climax:{e:'⭐',c:'#a94442',l:'빛나는 순간'},end:{e:'🌈',c:'#2d6a4f',l:'끝'},author:{e:'✍️',c:'#4a5a2b',l:'작가 소개'}};
+
+/* ═══ 유틸 ═══ */
+let _u=0; const uid=()=>'p'+(++_u)+'_'+Date.now().toString(36);
+const esc=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+/* ═══ 기본 페이지 구조 ═══ */
+function defPages(){return[
+  {id:uid(),type:'cover',prompt:'제목 + 주인공',guide:'제목을 크게 쓰고, 주인공을 그려요',text:'',locked:true},
+  {id:uid(),type:'start',prompt:'어느 날...',guide:'주인공을 소개해요',text:''},
+  {id:uid(),type:'start',prompt:'그 아이에게는...',guide:'주인공의 꿈과 바람은?',text:''},
+  {id:uid(),type:'start',prompt:'그런데...',guide:'어떤 문제가 생겼나요?',text:''},
+  {id:uid(),type:'middle',prompt:'그래서...',guide:'처음 어떻게 시도했나요?',text:''},
+  {id:uid(),type:'middle',prompt:'하지만...',guide:'쉽지 않았어요. 어떻게 됐나요?',text:''},
+  {id:uid(),type:'climax',prompt:'바로 그때!',guide:'학습자상이 빛나는 순간! 어떻게 행동했나요?',text:'',locked:true},
+  {id:uid(),type:'middle',prompt:'그 힘으로...',guide:'그 힘으로 다시 도전했어요!',text:''},
+  {id:uid(),type:'end',prompt:'드디어...',guide:'어떻게 해결됐나요?',text:''},
+  {id:uid(),type:'end',prompt:'주변도...',guide:'주변은 어떻게 달라졌나요?',text:''},
+  {id:uid(),type:'end',prompt:'그 뒤로...',guide:'주인공이 어떻게 성장했나요?',text:''},
+  {id:uid(),type:'author',prompt:'',guide:'',text:'',locked:true},
+];}
+
+let pages=defPages();
+const cvData={}; // id → dataURL
+const cvCtx={};  // id → {drawing,color,size,tool,hasContent}
+
+/* ═══ 렌더링 ═══ */
+function render(){
+  const root=document.getElementById('root');
+  root.innerHTML='';
+  pages.forEach((p,i)=>{
+    // 장면 추가 버튼: 첫 페이지 뒤부터, author 앞까지
+    if(i>0 && pages[i-1].type!=='author'){
+      root.appendChild(makeAddBtn(i));
+    }
+    if(p.type==='author') root.appendChild(makeAuthor(p,i));
+    else root.appendChild(makeCard(p,i));
+  });
+  document.getElementById('pc').textContent=pages.length;
+  // 캔버스 초기화
+  setTimeout(()=>{pages.forEach(p=>{if(p.type!=='author')initCv(p.id);});},50);
+  updateProg();
+}
+
+function makeAddBtn(idx){
+  const b=document.createElement('button');
+  b.className='add-btn';
+  b.innerHTML='<span class="ic">+</span> 여기에 장면 추가';
+  b.onclick=()=>addPage(idx);
+  return b;
+}
+
+function makeCard(p,idx){
+  const n=idx+1, t=T[p.type], locked=p.locked;
+  const canMoveUp=idx>0&&!pages[idx-1]?.locked||!locked;
+  const canMoveDn=idx<pages.length-2;
+  const d=document.createElement('div');
+  d.className='page-card'; d.dataset.id=p.id;
+  d.innerHTML=`
+    <div class="page-header" data-type="${p.type}">
+      <div class="left">
+        <span>P${n} ${t.e} ${t.l}</span>
+        ${!locked?`<select class="type-select" onchange="chgType('${p.id}',this.value)">
+          <option value="start" ${p.type==='start'?'selected':''}>시작</option>
+          <option value="middle" ${p.type==='middle'?'selected':''}>중간</option>
+          <option value="climax" ${p.type==='climax'?'selected':''}>빛나는 순간</option>
+          <option value="end" ${p.type==='end'?'selected':''}>끝</option>
+        </select>`:''}
+        <span class="page-prompt">${esc(p.prompt)}</span>
+      </div>
+      <div class="acts">
+        <button onclick="mv('${p.id}',-1)" ${idx<=0||(idx===1&&pages[0].locked)?'disabled':''} title="위로">▲</button>
+        <button onclick="mv('${p.id}',1)" ${!canMoveDn?'disabled':''} title="아래로">▼</button>
+        ${!locked?`<button onclick="askDel('${p.id}')" title="삭제" style="color:#ffc0c0;">✕</button>`:''}
+      </div>
+    </div>
+    <div class="page-inner">
+      <div>
+        <div class="dtb" id="tb-${p.id}"></div>
+        <div class="drawing-area" id="da-${p.id}">
+          <canvas id="cv-${p.id}"></canvas>
+          <div class="ph" id="ph-${p.id}"><span>${p.type==='climax'?'⭐':'🎨'}</span>${p.type==='climax'?'가장 인상적인 장면!':'그리거나 사진을 올려요'}</div>
+        </div>
+      </div>
+      <div class="text-side">
+        <div class="pg ${p.type==='climax'?'hl':''}">${t.e} ${p.guide}</div>
+        <input class="ptx prompt-input" value="${esc(p.prompt)}" onchange="chgPrompt('${p.id}',this.value)" placeholder="장면 힌트 (예: 그런데...)">
+        <textarea class="ptx" id="tx-${p.id}" placeholder="이 장면의 이야기를 써요... (1~3문장)" oninput="chgTxt('${p.id}',this.value)">${esc(p.text)}</textarea>
+      </div>
+    </div>`;
+  return d;
+}
+
+function makeAuthor(p,idx){
+  const n=idx+1;
+  const d=document.createElement('div');
+  d.className='page-card'; d.dataset.id=p.id;
+  d.innerHTML=`
+    <div class="page-header" data-type="author">
+      <div class="left"><span>P${n} ✍️ 작가 소개</span></div><div class="acts"></div>
+    </div>
+    <div class="author-section">
+      <div class="author-profile">
+        <div class="author-avatar">🧑‍🎨</div>
+        <div class="author-fields">
+          <div class="af"><label>✍️ 작가</label><input type="text" id="a-name" placeholder="나의 이름"></div>
+          <div class="af"><label>🌟 학습자상</label><input type="text" id="a-lp" readonly></div>
+        </div>
+      </div>
+      <div class="af"><label>💌 전하고 싶은 말</label><textarea class="ptx" id="a-msg" placeholder="독자에게 전하고 싶은 말..." style="min-height:60px;"></textarea></div>
+      <div class="dedication">이 책을 <input type="text" id="a-ded" placeholder="___"> 에게 바칩니다.</div>
+      <div class="checklist">
+        <h4>✅ 완성 전 체크</h4>
+        <label><input type="checkbox" id="chk1"> 학습자상이 이야기 속에 잘 드러나는가?</label>
+        <label><input type="checkbox" id="chk2"> 시작-중간-끝 구조가 자연스러운가?</label>
+        <label><input type="checkbox" id="chk3"> 빛나는 순간이 가장 인상적인 장면인가?</label>
+        <label><input type="checkbox" id="chk4"> 그림과 글이 서로 어울리는가?</label>
+      </div>
+    </div>`;
+  return d;
+}
+
+/* ═══ 장면 CRUD ═══ */
+function addPage(idx){
+  const prev=pages[idx-1]?.type||'start', next=pages[idx]?.type||'end';
+  let tp='middle';
+  if(prev==='cover'||prev==='start')tp='start';
+  if(next==='end'||next==='author')tp='end';
+  if(prev==='climax')tp='middle';
+  const np={id:uid(),type:tp,prompt:'그리고...',guide:T[tp].l+' 장면을 써요',text:''};
+  saveCvAll(); pages.splice(idx,0,np); render();
+  setTimeout(()=>{document.querySelector(`[data-id="${np.id}"]`)?.scrollIntoView({behavior:'smooth',block:'center'});},120);
+  toast(`장면 추가! (총 ${pages.length}장) ✨`);
+}
+
+let _delId=null;
+function askDel(id){
+  const p=pages.find(x=>x.id===id); if(!p)return;
+  const i=pages.indexOf(p);
+  document.getElementById('cMsg').textContent=`P${i+1} "${T[p.type].l}" 장면을 삭제할까요?`;
+  _delId=id; document.getElementById('cOverlay').classList.add('show');
+  document.getElementById('cDelBtn').onclick=doDel;
+}
+function closeC(){document.getElementById('cOverlay').classList.remove('show');_delId=null;}
+function doDel(){if(!_delId)return; saveCvAll(); pages=pages.filter(p=>p.id!==_delId); delete cvData[_delId]; closeC(); render(); toast(`장면 삭제 (총 ${pages.length}장) 🗑️`);}
+
+function mv(id,dir){
+  const i=pages.findIndex(p=>p.id===id), ni=i+dir;
+  if(ni<0||ni>=pages.length)return;
+  if(pages[ni].locked&&pages[ni].type==='author'&&dir>0)return;
+  if(pages[ni].locked&&pages[ni].type==='cover'&&dir<0)return;
+  saveCvAll();[pages[i],pages[ni]]=[pages[ni],pages[i]];render();
+}
+function chgType(id,v){const p=pages.find(x=>x.id===id);if(p){p.type=v;p.guide=T[v].l+' 장면을 써요';saveCvAll();render();}}
+function chgTxt(id,v){const p=pages.find(x=>x.id===id);if(p)p.text=v;updateProg();}
+function chgPrompt(id,v){const p=pages.find(x=>x.id===id);if(p)p.prompt=v;}
+
+/* ═══ 캔버스 ═══ */
+function initCv(id){
+  const cv=document.getElementById(`cv-${id}`);if(!cv)return;
+  const box=cv.parentElement.getBoundingClientRect();
+  cv.width=box.width*2;cv.height=box.height*2;
+  const c=cv.getContext('2d');c.scale(2,2);c.lineCap='round';c.lineJoin='round';
+  cvCtx[id]={drawing:false,color:'#3a2e1e',size:3,tool:'pen',has:false};
+  if(cvData[id]){const img=new Image();img.onload=()=>{c.drawImage(img,0,0,box.width,box.height);cvCtx[id].has=true;const ph=document.getElementById(`ph-${id}`);if(ph)ph.classList.add('hidden');};img.src=cvData[id];}
+  const gp=e=>{const r=cv.getBoundingClientRect(),t=e.touches?e.touches[0]:e;return{x:t.clientX-r.left,y:t.clientY-r.top};};
+  const sd=e=>{e.preventDefault();cvCtx[id].drawing=true;const p=gp(e);c.beginPath();c.moveTo(p.x,p.y);};
+  const dr=e=>{e.preventDefault();const s=cvCtx[id];if(!s.drawing)return;const p=gp(e);c.strokeStyle=s.tool==='eraser'?'#fff':s.color;c.lineWidth=s.tool==='eraser'?s.size*4:s.size;c.lineTo(p.x,p.y);c.stroke();const ph=document.getElementById(`ph-${id}`);if(ph)ph.classList.add('hidden');s.has=true;};
+  const ed=()=>{cvCtx[id].drawing=false;};
+  cv.addEventListener('mousedown',sd);cv.addEventListener('mousemove',dr);cv.addEventListener('mouseup',ed);cv.addEventListener('mouseleave',ed);
+  cv.addEventListener('touchstart',sd,{passive:false});cv.addEventListener('touchmove',dr,{passive:false});cv.addEventListener('touchend',ed);
+  mkTb(id);
+}
+function mkTb(id){
+  const tb=document.getElementById(`tb-${id}`);if(!tb)return;
+  tb.innerHTML=`<button class="at" data-tool="pen" onclick="stl('${id}','pen',this)">✏️ 펜</button><button data-tool="eraser" onclick="stl('${id}','eraser',this)">🧽</button><input type="color" value="#3a2e1e" onchange="cvCtx['${id}'].color=this.value"><input type="range" min="1" max="12" value="3" onchange="cvCtx['${id}'].size=+this.value"><label>📷<input type="file" accept="image/*" onchange="ldImg('${id}',this)"></label><button onclick="clrCv('${id}')">🗑️</button>`;
+}
+function stl(id,t,b){cvCtx[id].tool=t;b.parentElement.querySelectorAll('button[data-tool]').forEach(x=>x.classList.remove('at'));b.classList.add('at');}
+function clrCv(id){const cv=document.getElementById(`cv-${id}`);cv.getContext('2d').clearRect(0,0,cv.width,cv.height);const ph=document.getElementById(`ph-${id}`);if(ph)ph.classList.remove('hidden');cvCtx[id].has=false;delete cvData[id];}
+function ldImg(id,inp){
+  if(!inp.files[0])return;const r=new FileReader();
+  r.onload=e=>{const cv=document.getElementById(`cv-${id}`),c=cv.getContext('2d'),img=new Image();
+  img.onload=()=>{c.clearRect(0,0,cv.width,cv.height);const s=Math.min((cv.width/2)/img.width,(cv.height/2)/img.height),w=img.width*s,h=img.height*s;c.drawImage(img,((cv.width/2)-w)/2,((cv.height/2)-h)/2,w,h);cvCtx[id].has=true;const ph=document.getElementById(`ph-${id}`);if(ph)ph.classList.add('hidden');cvData[id]=cv.toDataURL('image/png');};
+  img.src=e.target.result;};r.readAsDataURL(inp.files[0]);
+}
+function saveCvAll(){
+  pages.forEach(p=>{if(p.type==='author')return;
+    const cv=document.getElementById(`cv-${p.id}`);
+    if(cv&&cvCtx[p.id]?.has)cvData[p.id]=cv.toDataURL('image/png');
+    const tx=document.getElementById(`tx-${p.id}`);if(tx)p.text=tx.value;
+  });
+}
+
+/* ═══ 진행률 ═══ */
+function updateProg(){
+  const sp=pages.filter(p=>p.type!=='author');let f=0;const tot=sp.length+4;
+  sp.forEach(p=>{if(p.text.trim())f++;});
+  if(document.getElementById('i-class').value.trim())f++;
+  if(document.getElementById('i-name').value.trim())f++;
+  if(document.getElementById('i-title').value.trim())f++;
+  if(document.getElementById('i-lp').value)f++;
+  const pct=Math.round(f/tot*100);
+  document.getElementById('pp').textContent=pct+'%';
+  document.getElementById('pf').style.width=pct+'%';
+}
+
+/* ═══ 데이터 수집 ═══ */
+function collect(){
+  saveCvAll();
+  return{
+    meta:{school:'남부초등학교',grade:6,subject:'도덕',unit:'1단원 「나는 꿈 요리사」 × IB 학습자상 그림책 프로젝트',totalPages:pages.length,exportDate:new Date().toISOString()},
+    student:{class:document.getElementById('i-class').value,name:document.getElementById('i-name').value,title:document.getElementById('i-title').value,protagonist:document.getElementById('i-prot').value,learnerProfile:document.getElementById('i-lp').value},
+    pages:pages.filter(p=>p.type!=='author').map((p,i)=>({page:i+1,id:p.id,type:p.type,label:T[p.type].l,prompt:p.prompt,guide:p.guide,text:p.text,drawing:cvData[p.id]||null})),
+    author:{name:document.getElementById('a-name')?.value||'',learnerProfile:document.getElementById('a-lp')?.value||'',message:document.getElementById('a-msg')?.value||'',dedicationTo:document.getElementById('a-ded')?.value||''},
+    checklist:{lp:document.getElementById('chk1')?.checked,struct:document.getElementById('chk2')?.checked,climax:document.getElementById('chk3')?.checked,match:document.getElementById('chk4')?.checked},
+    _ps:pages.map(p=>({...p})) // 페이지 구조 보존
+  };
+}
+
+/* ═══ JSON 내보내기 ═══ */
+function expJSON(){
+  const d=collect();
+  const inc=confirm('그림 데이터 포함?\n확인: 포함 / 취소: 텍스트만');
+  if(!inc)d.pages.forEach(p=>p.drawing=null);
+  const b=new Blob([JSON.stringify(d,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);
+  a.download=`스토리보드_${d.student.class||''}반_${d.student.name||'이름없음'}.json`;
+  a.click();URL.revokeObjectURL(a.href);toast('JSON 저장 완료! 📋');
+}
+
+/* ═══ PDF 내보내기 ═══ */
+async function expPDF(){
+  document.getElementById('loading').classList.add('show');
+  try{
+    const d=collect(),nm=`스토리보드_${d.student.class||''}반_${d.student.name||'이름없음'}.pdf`;
+    const div=document.createElement('div');div.style.cssText='width:794px;font-family:"Noto Sans KR",sans-serif;background:#fff;';document.body.appendChild(div);
+    const sp=d.pages,per=6,sheets=Math.ceil(sp.length/per);let h='';
+    for(let s=0;s<sheets;s++){
+      if(s>0)h+='<div style="page-break-before:always"></div>';
+      h+=pdfSheet(sp.slice(s*per,(s+1)*per),s,sheets,d);
+    }
+    h+='<div style="page-break-before:always"></div>'+pdfAuthor(d);
+    div.innerHTML=h;
+    await html2pdf().set({margin:0,filename:nm,image:{type:'jpeg',quality:0.9},html2canvas:{scale:2,useCORS:true,backgroundColor:'#fff'},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},pagebreak:{mode:['css','legacy']}}).from(div).save();
+    document.body.removeChild(div);toast('PDF 저장 완료! 📄');
+  }catch(e){console.error(e);toast('PDF 오류 😢');}
+  finally{document.getElementById('loading').classList.remove('show');}
+}
+function pdfSheet(sl,si,st,d){
+  let cards='';sl.forEach(p=>{
+    const c=T[p.type]?.c||'#5c3d1a';
+    const dr=p.drawing?`<img src="${p.drawing}" style="width:100%;height:120px;object-fit:contain;border-radius:4px;">`:`<div style="width:100%;height:120px;background:#f9f6f0;border:1px dashed #d4c9b5;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#aaa;font-size:10px;">(그림)</div>`;
+    cards+=`<div style="border:1px solid #d4c9b5;border-radius:8px;overflow:hidden;"><div style="background:${c};color:#fff;padding:5px 10px;font-size:11px;font-weight:700;display:flex;justify-content:space-between;"><span>P${p.page} ${T[p.type]?.e||''} ${p.label}</span><span style="font-size:9px;opacity:.8;">${p.prompt}</span></div><div style="padding:8px;">${dr}<div style="margin-top:6px;font-size:9px;color:#9a8b76;">${p.guide}</div><div style="margin-top:3px;font-size:12px;font-family:'Gaegu',cursive;line-height:1.5;min-height:32px;padding:5px;background:#fefcf6;border:1px solid #e8e0d2;border-radius:4px;">${(p.text||'').replace(/\n/g,'<br>')||'<span style="color:#ccc;">—</span>'}</div></div></div>`;
+  });
+  return`<div style="padding:20px 28px;min-height:1100px;"><div style="background:#5c3d1a;color:#fff;padding:10px 16px;border-radius:8px;margin-bottom:12px;"><div style="font-size:14px;font-weight:700;">📖 나의 그림책 스토리보드 (${si+1}/${st})</div><div style="font-size:10px;opacity:.8;">${d.meta.unit} · 전체 ${d.meta.totalPages}장</div></div><div style="display:flex;gap:12px;margin-bottom:12px;font-size:11px;color:#6b5d4a;"><span><b>반:</b> ${d.student.class}</span><span><b>이름:</b> ${d.student.name}</span><span><b>제목:</b> ${d.student.title}</span><span><b>학습자상:</b> ${d.student.learnerProfile}</span></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">${cards}</div><div style="text-align:center;margin-top:12px;font-size:8px;color:#aaa;">남부초등학교 · 6학년 도덕 · IB 학습자상 그림책 프로젝트</div></div>`;
+}
+function pdfAuthor(d){
+  return`<div style="padding:40px 60px;min-height:1100px;display:flex;flex-direction:column;align-items:center;justify-content:center;"><div style="text-align:center;max-width:500px;"><div style="font-size:60px;margin-bottom:20px;">✍️</div><h2 style="font-size:20px;color:#5c3d1a;margin-bottom:24px;">작가 소개</h2><div style="font-size:14px;margin-bottom:8px;color:#6b5d4a;"><b>작가:</b> ${d.author.name}</div><div style="font-size:14px;margin-bottom:20px;color:#6b5d4a;"><b>학습자상:</b> ${d.author.learnerProfile}</div><div style="padding:20px;background:#fefcf6;border:1px solid #e8e0d2;border-radius:8px;margin-bottom:20px;"><div style="font-size:12px;color:#9a8b76;margin-bottom:8px;">💌 전하고 싶은 말</div><div style="font-family:'Gaegu',cursive;font-size:15px;line-height:1.7;">${(d.author.message||'').replace(/\n/g,'<br>')||'—'}</div></div><div style="font-size:14px;color:#6b5d4a;">이 책을 <b>${d.author.dedicationTo||'___'}</b> 에게 바칩니다.</div></div></div>`;
+}
+
+/* ═══ 로컬 저장/불러오기 ═══ */
+function saveLocal(){
+  const d=collect();
+  try{localStorage.setItem('sb2',JSON.stringify(d));toast('임시 저장 완료! 💾');}
+  catch{d.pages.forEach(p=>p.drawing=null);localStorage.setItem('sb2',JSON.stringify(d));toast('텍스트만 저장됨 💾');}
+}
+function loadLocal(){
+  const r=localStorage.getItem('sb2');
+  if(!r){toast('저장 데이터 없음 📭');return;}
+  restoreAll(JSON.parse(r));toast('불러오기 완료! 📂');
+}
+function restoreAll(d){
+  document.getElementById('i-class').value=d.student?.class||'';
+  document.getElementById('i-name').value=d.student?.name||'';
+  document.getElementById('i-title').value=d.student?.title||'';
+  document.getElementById('i-prot').value=d.student?.protagonist||'';
+  document.getElementById('i-lp').value=d.student?.learnerProfile||'';
+  if(d._ps)pages=d._ps; else{pages=defPages();d.pages?.forEach((dp,i)=>{if(pages[i])pages[i].text=dp.text||'';});}
+  d.pages?.forEach(dp=>{if(dp.drawing&&dp.id)cvData[dp.id]=dp.drawing;});
+  render();
+  setTimeout(()=>{
+    const an=document.getElementById('a-name');if(an)an.value=d.author?.name||'';
+    const al=document.getElementById('a-lp');if(al)al.value=d.author?.learnerProfile||'';
+    const am=document.getElementById('a-msg');if(am)am.value=d.author?.message||'';
+    const ad=document.getElementById('a-ded');if(ad)ad.value=d.author?.dedicationTo||'';
+    if(d.checklist){
+      const c1=document.getElementById('chk1');if(c1)c1.checked=d.checklist.lp||false;
+      const c2=document.getElementById('chk2');if(c2)c2.checked=d.checklist.struct||false;
+      const c3=document.getElementById('chk3');if(c3)c3.checked=d.checklist.climax||false;
+      const c4=document.getElementById('chk4');if(c4)c4.checked=d.checklist.match||false;
+    }
+  },200);
+}
+
+// JSON 드래그앤드롭
+document.addEventListener('dragover',e=>e.preventDefault());
+document.addEventListener('drop',e=>{e.preventDefault();const f=e.dataTransfer?.files[0];if(f&&f.name.endsWith('.json')){const r=new FileReader();r.onload=ev=>{try{restoreAll(JSON.parse(ev.target.result));toast('JSON 불러오기 완료! 🎉');}catch{toast('잘못된 JSON 😢');}};r.readAsText(f);}});
+
+/* ═══ 유틸 ═══ */
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
+
+// 학습자상·이름 동기화
+document.getElementById('i-lp').addEventListener('change',function(){const e=document.getElementById('a-lp');if(e)e.value=this.value;});
+document.getElementById('i-name').addEventListener('input',function(){const e=document.getElementById('a-name');if(e)e.value=this.value;});
+document.querySelectorAll('.student-info input, .student-info select').forEach(el=>{el.addEventListener('input',updateProg);el.addEventListener('change',updateProg);});
+
+/* ═══ 초기 렌더 ═══ */
+render();
+</script>
+</body>
+</html>
