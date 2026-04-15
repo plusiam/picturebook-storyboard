@@ -238,6 +238,35 @@ function defPages(){return[
 let pages=defPages();
 const cvData={}; // id → dataURL
 const cvCtx={};  // id → {drawing,color,size,tool,hasContent}
+const cvHist={};  // id → {stack:[], pos:int} (Undo/Redo)
+
+function histSave(id){
+  const cv=document.getElementById(`cv-${id}`);if(!cv)return;
+  if(!cvHist[id])cvHist[id]={stack:[],pos:-1};
+  const h=cvHist[id];
+  // 현재 위치 이후 히스토리 제거
+  h.stack=h.stack.slice(0,h.pos+1);
+  h.stack.push(cv.toDataURL('image/png'));
+  if(h.stack.length>30)h.stack.shift(); // 최대 30단계
+  h.pos=h.stack.length-1;
+}
+function histUndo(id){
+  const h=cvHist[id];if(!h||h.pos<=0)return;
+  h.pos--;
+  applyHist(id,h.stack[h.pos]);
+}
+function histRedo(id){
+  const h=cvHist[id];if(!h||h.pos>=h.stack.length-1)return;
+  h.pos++;
+  applyHist(id,h.stack[h.pos]);
+}
+function applyHist(id,dataURL){
+  const cv=document.getElementById(`cv-${id}`);if(!cv)return;
+  const c=cv.getContext('2d'),box=cv.parentElement.getBoundingClientRect();
+  const img=new Image();
+  img.onload=()=>{c.clearRect(0,0,cv.width,cv.height);c.drawImage(img,0,0,box.width,box.height);cvData[id]=dataURL;};
+  img.src=dataURL;
+}
 
 /* ═══ 렌더링 ═══ */
 function render(){
@@ -381,14 +410,14 @@ function initCv(id){
   const gp=e=>{const r=cv.getBoundingClientRect(),t=e.touches?e.touches[0]:e;return{x:t.clientX-r.left,y:t.clientY-r.top};};
   const sd=e=>{e.preventDefault();cvCtx[id].drawing=true;const p=gp(e);c.beginPath();c.moveTo(p.x,p.y);};
   const dr=e=>{e.preventDefault();const s=cvCtx[id];if(!s.drawing)return;const p=gp(e);c.strokeStyle=s.tool==='eraser'?'#fff':s.color;c.lineWidth=s.tool==='eraser'?s.size*4:s.size;c.lineTo(p.x,p.y);c.stroke();const ph=document.getElementById(`ph-${id}`);if(ph)ph.classList.add('hidden');s.has=true;};
-  const ed=()=>{cvCtx[id].drawing=false;};
+  const ed=()=>{if(cvCtx[id].drawing){cvCtx[id].drawing=false;histSave(id);}};
   cv.addEventListener('mousedown',sd);cv.addEventListener('mousemove',dr);cv.addEventListener('mouseup',ed);cv.addEventListener('mouseleave',ed);
   cv.addEventListener('touchstart',sd,{passive:false});cv.addEventListener('touchmove',dr,{passive:false});cv.addEventListener('touchend',ed);
   mkTb(id);
 }
 function mkTb(id){
   const tb=document.getElementById(`tb-${id}`);if(!tb)return;
-  tb.innerHTML=`<button class="at" data-tool="pen" onclick="stl('${id}','pen',this)">✏️ 펜</button><button data-tool="eraser" onclick="stl('${id}','eraser',this)">🧽</button><input type="color" value="#3a2e1e" onchange="cvCtx['${id}'].color=this.value"><input type="range" min="1" max="12" value="3" onchange="cvCtx['${id}'].size=+this.value"><label>📷<input type="file" accept="image/*" onchange="ldImg('${id}',this)"></label><button onclick="clrCv('${id}')">🗑️</button>`;
+  tb.innerHTML=`<button class="at" data-tool="pen" onclick="stl('${id}','pen',this)">✏️ 펜</button><button data-tool="eraser" onclick="stl('${id}','eraser',this)">🧽</button><input type="color" value="#3a2e1e" onchange="cvCtx['${id}'].color=this.value"><input type="range" min="1" max="12" value="3" onchange="cvCtx['${id}'].size=+this.value"><label>📷<input type="file" accept="image/*" onchange="ldImg('${id}',this)"></label><button onclick="histUndo('${id}')" title="되돌리기 (Ctrl+Z)">↩️</button><button onclick="histRedo('${id}')" title="다시하기 (Ctrl+Y)">↪️</button><button onclick="clrCv('${id}')">🗑️</button>`;
 }
 function stl(id,t,b){cvCtx[id].tool=t;b.parentElement.querySelectorAll('button[data-tool]').forEach(x=>x.classList.remove('at'));b.classList.add('at');}
 function clrCv(id){const cv=document.getElementById(`cv-${id}`);cv.getContext('2d').clearRect(0,0,cv.width,cv.height);const ph=document.getElementById(`ph-${id}`);if(ph)ph.classList.remove('hidden');cvCtx[id].has=false;delete cvData[id];}
@@ -465,19 +494,39 @@ function pdfSheet(sl,si,st,d){
   let cards='';sl.forEach(p=>{
     const c=T[p.type]?.c||'#5c3d1a';
     const dr=p.drawing?`<img src="${p.drawing}" style="width:100%;height:120px;object-fit:contain;border-radius:4px;">`:`<div style="width:100%;height:120px;background:#f9f6f0;border:1px dashed #d4c9b5;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#aaa;font-size:10px;">(그림)</div>`;
-    cards+=`<div style="border:1px solid #d4c9b5;border-radius:8px;overflow:hidden;"><div style="background:${c};color:#fff;padding:5px 10px;font-size:11px;font-weight:700;display:flex;justify-content:space-between;"><span>P${p.page} ${T[p.type]?.e||''} ${p.label}</span><span style="font-size:9px;opacity:.8;">${p.prompt}</span></div><div style="padding:8px;">${dr}<div style="margin-top:6px;font-size:9px;color:#9a8b76;">${p.guide}</div><div style="margin-top:3px;font-size:12px;font-family:'Gaegu',cursive;line-height:1.5;min-height:32px;padding:5px;background:#fefcf6;border:1px solid #e8e0d2;border-radius:4px;">${(p.text||'').replace(/\n/g,'<br>')||'<span style="color:#ccc;">—</span>'}</div></div></div>`;
+    const safeText=esc(p.text||'').replace(/\n/g,'<br>')||'<span style="color:#ccc;">—</span>';
+    cards+=`<div style="border:1px solid #d4c9b5;border-radius:8px;overflow:hidden;"><div style="background:${c};color:#fff;padding:5px 10px;font-size:11px;font-weight:700;display:flex;justify-content:space-between;"><span>P${p.page} ${T[p.type]?.e||''} ${esc(p.label)}</span><span style="font-size:9px;opacity:.8;">${esc(p.prompt)}</span></div><div style="padding:8px;">${dr}<div style="margin-top:6px;font-size:9px;color:#9a8b76;">${esc(p.guide)}</div><div style="margin-top:3px;font-size:12px;font-family:'Gaegu',cursive;line-height:1.5;min-height:32px;padding:5px;background:#fefcf6;border:1px solid #e8e0d2;border-radius:4px;">${safeText}</div></div></div>`;
   });
-  return`<div style="padding:20px 28px;min-height:1100px;"><div style="background:#5c3d1a;color:#fff;padding:10px 16px;border-radius:8px;margin-bottom:12px;"><div style="font-size:14px;font-weight:700;">📖 나의 그림책 스토리보드 (${si+1}/${st})</div><div style="font-size:10px;opacity:.8;">${d.meta.unit} · 전체 ${d.meta.totalPages}장</div></div><div style="display:flex;gap:12px;margin-bottom:12px;font-size:11px;color:#6b5d4a;"><span><b>반:</b> ${d.student.class}</span><span><b>이름:</b> ${d.student.name}</span><span><b>제목:</b> ${d.student.title}</span><span><b>학습자상:</b> ${d.student.learnerProfile}</span></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">${cards}</div><div style="text-align:center;margin-top:12px;font-size:8px;color:#aaa;">남부초등학교 · 6학년 도덕 · IB 학습자상 그림책 프로젝트</div></div>`;
+  return`<div style="padding:20px 28px;min-height:1100px;"><div style="background:#5c3d1a;color:#fff;padding:10px 16px;border-radius:8px;margin-bottom:12px;"><div style="font-size:14px;font-weight:700;">📖 나의 그림책 스토리보드 (${si+1}/${st})</div><div style="font-size:10px;opacity:.8;">${esc(d.meta.unit)} · 전체 ${d.meta.totalPages}장</div></div><div style="display:flex;gap:12px;margin-bottom:12px;font-size:11px;color:#6b5d4a;"><span><b>반:</b> ${esc(d.student.class)}</span><span><b>이름:</b> ${esc(d.student.name)}</span><span><b>제목:</b> ${esc(d.student.title)}</span><span><b>학습자상:</b> ${esc(d.student.learnerProfile)}</span></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">${cards}</div><div style="text-align:center;margin-top:12px;font-size:8px;color:#aaa;">남부초등학교 · 6학년 도덕 · IB 학습자상 그림책 프로젝트</div></div>`;
 }
 function pdfAuthor(d){
-  return`<div style="padding:40px 60px;min-height:1100px;display:flex;flex-direction:column;align-items:center;justify-content:center;"><div style="text-align:center;max-width:500px;"><div style="font-size:60px;margin-bottom:20px;">✍️</div><h2 style="font-size:20px;color:#5c3d1a;margin-bottom:24px;">작가 소개</h2><div style="font-size:14px;margin-bottom:8px;color:#6b5d4a;"><b>작가:</b> ${d.author.name}</div><div style="font-size:14px;margin-bottom:20px;color:#6b5d4a;"><b>학습자상:</b> ${d.author.learnerProfile}</div><div style="padding:20px;background:#fefcf6;border:1px solid #e8e0d2;border-radius:8px;margin-bottom:20px;"><div style="font-size:12px;color:#9a8b76;margin-bottom:8px;">💌 전하고 싶은 말</div><div style="font-family:'Gaegu',cursive;font-size:15px;line-height:1.7;">${(d.author.message||'').replace(/\n/g,'<br>')||'—'}</div></div><div style="font-size:14px;color:#6b5d4a;">이 책을 <b>${d.author.dedicationTo||'___'}</b> 에게 바칩니다.</div></div></div>`;
+  const safeMsg=esc(d.author.message||'').replace(/\n/g,'<br>')||'—';
+  return`<div style="padding:40px 60px;min-height:1100px;display:flex;flex-direction:column;align-items:center;justify-content:center;"><div style="text-align:center;max-width:500px;"><div style="font-size:60px;margin-bottom:20px;">✍️</div><h2 style="font-size:20px;color:#5c3d1a;margin-bottom:24px;">작가 소개</h2><div style="font-size:14px;margin-bottom:8px;color:#6b5d4a;"><b>작가:</b> ${esc(d.author.name)}</div><div style="font-size:14px;margin-bottom:20px;color:#6b5d4a;"><b>학습자상:</b> ${esc(d.author.learnerProfile)}</div><div style="padding:20px;background:#fefcf6;border:1px solid #e8e0d2;border-radius:8px;margin-bottom:20px;"><div style="font-size:12px;color:#9a8b76;margin-bottom:8px;">💌 전하고 싶은 말</div><div style="font-family:'Gaegu',cursive;font-size:15px;line-height:1.7;">${safeMsg}</div></div><div style="font-size:14px;color:#6b5d4a;">이 책을 <b>${esc(d.author.dedicationTo||'___')}</b> 에게 바칩니다.</div></div></div>`;
 }
 
 /* ═══ 로컬 저장/불러오기 ═══ */
-function saveLocal(){
+function saveLocal(silent=false){
   const d=collect();
-  try{localStorage.setItem('sb2',JSON.stringify(d));toast('임시 저장 완료! 💾');}
-  catch{d.pages.forEach(p=>p.drawing=null);localStorage.setItem('sb2',JSON.stringify(d));toast('텍스트만 저장됨 💾');}
+  try{
+    localStorage.setItem('sb2',JSON.stringify(d));
+    if(!silent)toast('임시 저장 완료! 💾');
+  }catch(e){
+    // 용량 초과 시 그림 제외 후 재시도
+    d.pages.forEach(p=>p.drawing=null);
+    try{
+      localStorage.setItem('sb2',JSON.stringify(d));
+      toast('⚠️ 그림 데이터가 너무 커서 텍스트만 저장됐어요. JSON으로 전체 저장해 두세요!');
+    }catch{
+      toast('❌ 저장 실패! 저장 공간이 꽉 찼어요. JSON 내보내기로 백업하세요.');
+    }
+  }
+}
+
+/* ═══ 자동저장 (5분마다) ═══ */
+let _autoSaveTimer=null;
+function startAutoSave(){
+  if(_autoSaveTimer)clearInterval(_autoSaveTimer);
+  _autoSaveTimer=setInterval(()=>{saveLocal(true);},5*60*1000);
 }
 function loadLocal(){
   const r=localStorage.getItem('sb2');
@@ -507,6 +556,20 @@ function restoreAll(d){
   },200);
 }
 
+// 활성 캔버스 추적 (Ctrl+Z/Y용)
+let _activeCv=null;
+document.addEventListener('mouseover',e=>{const da=e.target.closest('.drawing-area');if(da){const m=da.id.match(/^da-(.+)$/);if(m)_activeCv=m[1];}});
+
+// Ctrl+Z / Ctrl+Y 단축키
+document.addEventListener('keydown',e=>{
+  if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&e.key==='z'){
+    if(_activeCv){e.preventDefault();histUndo(_activeCv);}
+  }
+  if((e.ctrlKey||e.metaKey)&&(e.key==='y'||(e.shiftKey&&e.key==='z'))){
+    if(_activeCv){e.preventDefault();histRedo(_activeCv);}
+  }
+});
+
 // JSON 드래그앤드롭
 document.addEventListener('dragover',e=>e.preventDefault());
 document.addEventListener('drop',e=>{e.preventDefault();const f=e.dataTransfer?.files[0];if(f&&f.name.endsWith('.json')){const r=new FileReader();r.onload=ev=>{try{restoreAll(JSON.parse(ev.target.result));toast('JSON 불러오기 완료! 🎉');}catch{toast('잘못된 JSON 😢');}};r.readAsText(f);}});
@@ -514,13 +577,18 @@ document.addEventListener('drop',e=>{e.preventDefault();const f=e.dataTransfer?.
 /* ═══ 유틸 ═══ */
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
 
-// 학습자상·이름 동기화
-document.getElementById('i-lp').addEventListener('change',function(){const e=document.getElementById('a-lp');if(e)e.value=this.value;});
-document.getElementById('i-name').addEventListener('input',function(){const e=document.getElementById('a-name');if(e)e.value=this.value;});
+// 학습자상·이름 동기화 — render() 이후 DOM이 생성된 시점에 안전하게 적용
+function syncAuthorFields(){
+  const alp=document.getElementById('a-lp');if(alp)alp.value=document.getElementById('i-lp').value;
+  const anm=document.getElementById('a-name');if(anm)anm.value=document.getElementById('i-name').value;
+}
+document.getElementById('i-lp').addEventListener('change',syncAuthorFields);
+document.getElementById('i-name').addEventListener('input',syncAuthorFields);
 document.querySelectorAll('.student-info input, .student-info select').forEach(el=>{el.addEventListener('input',updateProg);el.addEventListener('change',updateProg);});
 
 /* ═══ 초기 렌더 ═══ */
 render();
+startAutoSave();
 </script>
 </body>
 </html>
