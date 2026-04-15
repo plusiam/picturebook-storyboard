@@ -170,6 +170,28 @@
   .cb .bd { background: var(--accent-red); color: #fff; }
   .cb button:focus-visible { outline: 3px solid var(--accent-gold); outline-offset: 2px; }
   .abtn:focus-visible { outline: 3px solid var(--header-brown); outline-offset: 2px; }
+
+  /* 크게 그리기 모달 */
+  .co.zoom { background: rgba(0,0,0,0.7); }
+  .zb { background: var(--card-bg); border-radius: 14px; padding: 14px 16px 16px; max-width: 96vw; max-height: 96vh; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 12px 40px rgba(0,0,0,0.4); }
+  .zb-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .zb-header .zt { font-size: 1rem; font-weight: 700; color: var(--header-brown); }
+  .zb-header button { padding: 8px 16px; border: none; border-radius: 8px; background: var(--header-brown); color: #fff; font-family: 'Noto Sans KR'; font-size: 0.85rem; font-weight: 700; cursor: pointer; min-height: 44px; }
+  .zb-header button:hover { background: var(--accent-gold); }
+  .zb-tools { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .zb-tools button, .zb-tools label { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--input-bg); font-size: 0.85rem; font-family: 'Noto Sans KR'; cursor: pointer; color: var(--text-mid); display: flex; align-items: center; gap: 4px; min-height: 40px; }
+  .zb-tools button:hover, .zb-tools label:hover { background: var(--accent-gold); color: #fff; border-color: var(--accent-gold); }
+  .zb-tools button.zat { background: var(--header-brown); color: #fff; border-color: var(--header-brown); }
+  .zb-tools input[type="color"] { width: 36px; height: 36px; border: 1px solid var(--border); border-radius: 6px; padding: 0; cursor: pointer; }
+  .zb-tools input[type="range"] { width: 110px; accent-color: var(--header-brown); }
+  .zb-tools .ztip { font-size: 0.72rem; color: var(--text-light); margin-left: auto; }
+  .zb-canvas-wrap { background: #fff; border: 2px solid var(--border); border-radius: 8px; padding: 4px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  #zoomCanvas { display: block; cursor: crosshair; touch-action: none; max-width: 100%; max-height: 100%; }
+
+  @media (max-width: 640px) {
+    .zb { padding: 10px; }
+    .zb-tools button, .zb-tools label { padding: 6px 8px; font-size: 0.78rem; }
+  }
 </style>
 </head>
 <body>
@@ -288,6 +310,20 @@
 </div>
 <input type="file" id="jsonFileInput" accept=".json,application/json" style="display:none;">
 
+<!-- 크게 그리기 모달 -->
+<div class="co zoom" id="zoomOverlay" role="dialog" aria-modal="true" aria-label="크게 그리기">
+  <div class="zb">
+    <div class="zb-header">
+      <span class="zt" id="zbTitle">🔍 크게 그리기</span>
+      <button type="button" onclick="closeZoom()" aria-label="저장하고 닫기">✅ 다 그렸어요</button>
+    </div>
+    <div class="zb-tools" id="zbTools"></div>
+    <div class="zb-canvas-wrap" id="zoomCanvasWrap">
+      <canvas id="zoomCanvas"></canvas>
+    </div>
+  </div>
+</div>
+
 <!-- 새로 시작 확인 모달 -->
 <div class="co" id="resetOverlay" role="dialog" aria-modal="true" aria-label="새로 시작 확인">
   <div class="cb">
@@ -346,13 +382,14 @@ const cvData={}; // id → dataURL
 const cvCtx={};  // id → {drawing,color,size,tool,hasContent}
 const cvHist={};  // id → {stack:[], pos:int} (Undo/Redo)
 
-function histSave(id){
-  const cv=document.getElementById(`cv-${id}`);if(!cv)return;
+function histSave(id,overrideDataURL){
+  const cv=document.getElementById(`cv-${id}`);if(!cv&&!overrideDataURL)return;
   if(!cvHist[id])cvHist[id]={stack:[],pos:-1};
   const h=cvHist[id];
   // 현재 위치 이후 히스토리 제거
   h.stack=h.stack.slice(0,h.pos+1);
-  h.stack.push(cv.toDataURL('image/png'));
+  // override가 있으면 그것을 저장 (예: 큰 화면 모달의 고해상도 결과)
+  h.stack.push(overrideDataURL||cv.toDataURL('image/png'));
   if(h.stack.length>30)h.stack.shift(); // 최대 30단계
   h.pos=h.stack.length-1;
 }
@@ -370,7 +407,12 @@ function applyHist(id,dataURL){
   const cv=document.getElementById(`cv-${id}`);if(!cv)return;
   const c=cv.getContext('2d'),box=cv.parentElement.getBoundingClientRect();
   const img=new Image();
-  img.onload=()=>{c.clearRect(0,0,cv.width,cv.height);c.drawImage(img,0,0,box.width,box.height);cvData[id]=dataURL;};
+  img.onload=()=>{
+    c.clearRect(0,0,cv.width,cv.height);
+    c.drawImage(img,0,0,box.width,box.height);
+    cvData[id]=dataURL;
+    if(cvCtx[id])cvCtx[id].smallNeedsCapture=false; // 동기 상태 → saveCvAll 덮어쓰기 방지
+  };
   img.src=dataURL;
 }
 
@@ -512,10 +554,10 @@ function initCv(id){
   const box=cv.parentElement.getBoundingClientRect();
   cv.width=box.width*2;cv.height=box.height*2;
   const c=cv.getContext('2d');c.scale(2,2);c.lineCap='round';c.lineJoin='round';
-  cvCtx[id]={drawing:false,color:'#3a2e1e',size:3,tool:'pen',has:false};
+  cvCtx[id]={drawing:false,color:'#3a2e1e',size:3,tool:'pen',has:false,smallNeedsCapture:false};
   if(cvData[id]){const img=new Image();img.onload=()=>{c.drawImage(img,0,0,box.width,box.height);cvCtx[id].has=true;const ph=document.getElementById(`ph-${id}`);if(ph)ph.classList.add('hidden');};img.src=cvData[id];}
   const gp=e=>{const r=cv.getBoundingClientRect(),t=e.touches?e.touches[0]:e;return{x:t.clientX-r.left,y:t.clientY-r.top};};
-  const sd=e=>{e.preventDefault();cvCtx[id].drawing=true;const p=gp(e);c.beginPath();c.moveTo(p.x,p.y);};
+  const sd=e=>{e.preventDefault();cvCtx[id].drawing=true;cvCtx[id].smallNeedsCapture=true;markDirty();const p=gp(e);c.beginPath();c.moveTo(p.x,p.y);};
   const dr=e=>{e.preventDefault();const s=cvCtx[id];if(!s.drawing)return;const p=gp(e);c.strokeStyle=s.tool==='eraser'?'#fff':s.color;c.lineWidth=s.tool==='eraser'?s.size*4:s.size;c.lineTo(p.x,p.y);c.stroke();const ph=document.getElementById(`ph-${id}`);if(ph)ph.classList.add('hidden');s.has=true;};
   const ed=()=>{if(cvCtx[id].drawing){cvCtx[id].drawing=false;histSave(id);}};
   cv.addEventListener('mousedown',sd);cv.addEventListener('mousemove',dr);cv.addEventListener('mouseup',ed);cv.addEventListener('mouseleave',ed);
@@ -524,7 +566,7 @@ function initCv(id){
 }
 function mkTb(id){
   const tb=document.getElementById(`tb-${id}`);if(!tb)return;
-  tb.innerHTML=`<button type="button" class="at" data-tool="pen" onclick="stl('${id}','pen',this)">✏️ 펜</button><button type="button" data-tool="eraser" onclick="stl('${id}','eraser',this)">🧽</button><input type="color" value="#3a2e1e" onchange="cvCtx['${id}'].color=this.value"><input type="range" min="1" max="12" value="3" onchange="cvCtx['${id}'].size=+this.value"><label>📷<input type="file" accept="image/*" onchange="ldImg('${id}',this)"></label><button type="button" onclick="histUndo('${id}')" title="되돌리기 (Ctrl+Z)">↩️</button><button type="button" onclick="histRedo('${id}')" title="다시하기 (Ctrl+Y)">↪️</button><button type="button" onclick="clrCv('${id}')" title="전체 지우기">🗑️</button>`;
+  tb.innerHTML=`<button type="button" class="at" data-tool="pen" onclick="stl('${id}','pen',this)">✏️ 펜</button><button type="button" data-tool="eraser" onclick="stl('${id}','eraser',this)">🧽</button><input type="color" value="#3a2e1e" onchange="cvCtx['${id}'].color=this.value"><input type="range" min="1" max="12" value="3" onchange="cvCtx['${id}'].size=+this.value"><label>📷<input type="file" accept="image/*" onchange="ldImg('${id}',this)"></label><button type="button" onclick="openZoom('${id}')" title="크게 그리기" style="background:var(--accent-gold);color:#fff;border-color:var(--accent-gold);">🔍 크게</button><button type="button" onclick="histUndo('${id}')" title="되돌리기 (Ctrl+Z)">↩️</button><button type="button" onclick="histRedo('${id}')" title="다시하기 (Ctrl+Y)">↪️</button><button type="button" onclick="clrCv('${id}')" title="전체 지우기">🗑️</button>`;
 }
 function stl(id,t,b){cvCtx[id].tool=t;b.parentElement.querySelectorAll('button[data-tool]').forEach(x=>x.classList.remove('at'));b.classList.add('at');}
 function clrCv(id){
@@ -538,13 +580,17 @@ function clrCv(id){
 function ldImg(id,inp){
   if(!inp.files[0])return;const r=new FileReader();
   r.onload=e=>{const cv=document.getElementById(`cv-${id}`),c=cv.getContext('2d'),img=new Image();
-  img.onload=()=>{c.clearRect(0,0,cv.width,cv.height);const s=Math.min((cv.width/2)/img.width,(cv.height/2)/img.height),w=img.width*s,h=img.height*s;c.drawImage(img,((cv.width/2)-w)/2,((cv.height/2)-h)/2,w,h);cvCtx[id].has=true;const ph=document.getElementById(`ph-${id}`);if(ph)ph.classList.add('hidden');cvData[id]=cvToJPEG(cv,0.85);};
+  img.onload=()=>{c.clearRect(0,0,cv.width,cv.height);const s=Math.min((cv.width/2)/img.width,(cv.height/2)/img.height),w=img.width*s,h=img.height*s;c.drawImage(img,((cv.width/2)-w)/2,((cv.height/2)-h)/2,w,h);cvCtx[id].has=true;cvCtx[id].smallNeedsCapture=false;const ph=document.getElementById(`ph-${id}`);if(ph)ph.classList.add('hidden');cvData[id]=cvToJPEG(cv,0.85);markDirty();};
   img.src=e.target.result;};r.readAsDataURL(inp.files[0]);
 }
 function saveCvAll(){
   pages.forEach(p=>{if(p.type==='author')return;
     const cv=document.getElementById(`cv-${p.id}`);
-    if(cv&&cvCtx[p.id]?.has)cvData[p.id]=cvToJPEG(cv,0.85);
+    // 작은 캔버스에 새 획이 있을 때만 캡처 → 큰 화면에서 만든 고해상도가 덮이지 않음
+    if(cv&&cvCtx[p.id]?.has&&cvCtx[p.id]?.smallNeedsCapture){
+      cvData[p.id]=cvToJPEG(cv,0.85);
+      cvCtx[p.id].smallNeedsCapture=false;
+    }
     const tx=document.getElementById(`tx-${p.id}`);if(tx)p.text=tx.value;
   });
 }
@@ -781,6 +827,163 @@ restoreAll=function(d){
   setTimeout(()=>{markClean();},300);
 };
 
+/* ═══ 크게 그리기 모달 (고해상도 무손실 라운드트립) ═══ */
+let _zoomTargetId=null;
+let _zoomState={drawing:false,color:'#3a2e1e',size:5,tool:'pen'};
+let _zoomLastFocus=null;
+
+function openZoom(id){
+  // 1) 작은 캔버스에 미저장 획이 있으면 먼저 캡처해서 cvData 동기화
+  saveCvAll();
+  _zoomTargetId=id;
+  _zoomLastFocus=document.activeElement;
+
+  const overlay=document.getElementById('zoomOverlay');
+  overlay.classList.add('show');
+
+  // 2) 큰 캔버스 크기 결정 — 4:3 비율 유지, 화면에 맞춤
+  const maxW=Math.min(window.innerWidth*0.92,1280)-40;
+  const maxH=Math.min(window.innerHeight*0.92,960)-200;
+  const ratio=4/3;
+  let w,h;
+  if(maxW/ratio<=maxH){w=maxW;h=maxW/ratio;}
+  else{h=maxH;w=maxH*ratio;}
+
+  // 3) 기존 zoomCanvas 자리에 새 캔버스 노드로 교체 (핸들러 누적 방지)
+  const wrap=document.getElementById('zoomCanvasWrap');
+  wrap.innerHTML='<canvas id="zoomCanvas"></canvas>';
+  const zcv=document.getElementById('zoomCanvas');
+  zcv.style.width=w+'px';
+  zcv.style.height=h+'px';
+  // 고해상도 (2x DPI)
+  zcv.width=Math.round(w*2);
+  zcv.height=Math.round(h*2);
+  const zc=zcv.getContext('2d');
+  zc.scale(2,2);
+  zc.lineCap='round';
+  zc.lineJoin='round';
+  // 흰 배경 (지우개가 흰색이라 일관성 유지)
+  zc.fillStyle='#ffffff';
+  zc.fillRect(0,0,w,h);
+
+  // 4) 기존 그림을 큰 캔버스에 로드 (cvData가 고해상도면 또렷하게 표시됨)
+  if(cvData[id]){
+    const img=new Image();
+    img.onload=()=>{zc.drawImage(img,0,0,w,h);};
+    img.src=cvData[id];
+  }
+
+  // 5) 드로잉 핸들러 부착
+  attachZoomHandlers(zcv,zc,w,h);
+  // 6) 툴바 빌드
+  buildZoomTools();
+  // 7) 첫 버튼 자동 포커스
+  setTimeout(()=>{const b=overlay.querySelector('.zb-header button');if(b)try{b.focus();}catch{}},60);
+}
+
+function attachZoomHandlers(zcv,zc,w,h){
+  const gp=e=>{
+    const r=zcv.getBoundingClientRect();
+    const t=e.touches?e.touches[0]:e;
+    return{x:t.clientX-r.left,y:t.clientY-r.top};
+  };
+  const sd=e=>{e.preventDefault();_zoomState.drawing=true;const p=gp(e);zc.beginPath();zc.moveTo(p.x,p.y);};
+  const dr=e=>{
+    e.preventDefault();
+    if(!_zoomState.drawing)return;
+    const p=gp(e);
+    zc.strokeStyle=_zoomState.tool==='eraser'?'#ffffff':_zoomState.color;
+    zc.lineWidth=_zoomState.tool==='eraser'?_zoomState.size*4:_zoomState.size;
+    zc.lineTo(p.x,p.y);
+    zc.stroke();
+  };
+  const ed=()=>{_zoomState.drawing=false;};
+  zcv.addEventListener('mousedown',sd);
+  zcv.addEventListener('mousemove',dr);
+  zcv.addEventListener('mouseup',ed);
+  zcv.addEventListener('mouseleave',ed);
+  zcv.addEventListener('touchstart',sd,{passive:false});
+  zcv.addEventListener('touchmove',dr,{passive:false});
+  zcv.addEventListener('touchend',ed);
+}
+
+function buildZoomTools(){
+  const tb=document.getElementById('zbTools');
+  tb.innerHTML=`
+    <button type="button" class="zat" data-tool="pen" onclick="zSetTool('pen',this)">✏️ 펜</button>
+    <button type="button" data-tool="eraser" onclick="zSetTool('eraser',this)">🧽 지우개</button>
+    <input type="color" value="${_zoomState.color}" onchange="_zoomState.color=this.value" aria-label="색상">
+    <input type="range" min="1" max="24" value="${_zoomState.size}" onchange="_zoomState.size=+this.value" aria-label="굵기">
+    <button type="button" onclick="zClear()">🗑️ 모두 지우기</button>
+    <span class="ztip">다 그리면 위 ✅ 버튼을 눌러요</span>
+  `;
+  // 펜 버튼 활성화 상태 보장
+  if(_zoomState.tool==='eraser'){
+    tb.querySelector('button[data-tool="pen"]').classList.remove('zat');
+    tb.querySelector('button[data-tool="eraser"]').classList.add('zat');
+  }
+}
+function zSetTool(t,btn){
+  _zoomState.tool=t;
+  document.querySelectorAll('#zbTools button[data-tool]').forEach(x=>x.classList.remove('zat'));
+  btn.classList.add('zat');
+}
+function zClear(){
+  if(!confirm('큰 화면 그림을 모두 지울까요?'))return;
+  const zcv=document.getElementById('zoomCanvas');
+  if(!zcv)return;
+  const zc=zcv.getContext('2d');
+  zc.save();
+  zc.setTransform(1,0,0,1,0,0);
+  zc.fillStyle='#ffffff';
+  zc.fillRect(0,0,zcv.width,zcv.height);
+  zc.restore();
+}
+
+function closeZoom(){
+  if(!_zoomTargetId){
+    document.getElementById('zoomOverlay').classList.remove('show');
+    return;
+  }
+  const id=_zoomTargetId;
+  const zcv=document.getElementById('zoomCanvas');
+  const cv=document.getElementById(`cv-${id}`);
+
+  if(zcv){
+    // 큰 캔버스의 고해상도 결과를 dataURL로 캡처
+    const hires=cvToJPEG(zcv,0.9); // 큰 화면은 품질 살짝 ↑
+    cvData[id]=hires;
+
+    if(cv){
+      // 작은 캔버스에 다운샘플로 다시 그림
+      const c=cv.getContext('2d');
+      const box=cv.parentElement.getBoundingClientRect();
+      c.clearRect(0,0,cv.width,cv.height);
+      c.fillStyle='#ffffff';
+      c.fillRect(0,0,cv.width,cv.height);
+      const img=new Image();
+      img.onload=()=>{
+        c.drawImage(img,0,0,box.width,box.height);
+        if(cvCtx[id]){
+          cvCtx[id].has=true;
+          cvCtx[id].smallNeedsCapture=false; // ★ 핵심: saveCvAll이 덮어쓰지 않도록
+        }
+        const ph=document.getElementById(`ph-${id}`);
+        if(ph)ph.classList.add('hidden');
+        // 히스토리에 고해상도 버전 저장 → Ctrl+Z 시 무손실 복귀
+        histSave(id,hires);
+      };
+      img.src=hires;
+    }
+  }
+
+  document.getElementById('zoomOverlay').classList.remove('show');
+  _zoomTargetId=null;
+  if(_zoomLastFocus){try{_zoomLastFocus.focus();}catch{}_zoomLastFocus=null;}
+  markDirty();
+  toast('큰 화면 그림이 저장됐어요 🎨');
+}
+
 /* ═══ 캔버스 리사이즈 보호 (창 크기 변경 시 그림 보존) ═══ */
 let _resizeTimer=null;
 window.addEventListener('resize',()=>{
@@ -918,6 +1121,8 @@ document.addEventListener('keydown',e=>{
     if(visible.length===0)return;
     e.preventDefault();
     const top=visible[visible.length-1];
+    // 큰 화면 그리기는 ESC도 저장 후 닫기 (작업 손실 방지)
+    if(top.id==='zoomOverlay'){closeZoom();return;}
     top.classList.remove('show');
     if(top.id==='cOverlay')_delId=null;
     if(_modalLastFocus){try{_modalLastFocus.focus();}catch{}_modalLastFocus=null;}
