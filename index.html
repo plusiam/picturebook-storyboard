@@ -123,12 +123,33 @@
   .badge strong { color: var(--header-brown); }
 
   /* 하단바 */
-  .action-bar { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(255,253,247,0.95); backdrop-filter: blur(10px); border-top: 1px solid var(--border); padding: 12px 20px; display: flex; justify-content: center; gap: 10px; z-index: 100; flex-wrap: wrap; }
+  .action-bar { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(255,253,247,0.95); backdrop-filter: blur(10px); border-top: 1px solid var(--border); padding: 10px 20px 12px; display: flex; flex-direction: column; align-items: center; gap: 6px; z-index: 100; }
+  .action-row { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
   .abtn { padding: 10px 20px; border: none; border-radius: 8px; font-family: 'Noto Sans KR'; font-size: 0.85rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
+  .abtn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
   .b-pdf { background: var(--accent-red); color: #fff; }
   .b-json { background: var(--accent-green); color: #fff; }
   .b-save { background: var(--accent-gold); color: #fff; }
   .b-load { background: var(--text-mid); color: #fff; }
+  .b-reset { background: #fff; color: var(--text-mid); border: 1px solid var(--border); }
+  .b-reset:hover { background: #fff5f5; color: var(--accent-red); border-color: var(--accent-red); }
+
+  /* 저장 상태 표시 */
+  .save-status { display: flex; align-items: center; gap: 12px; font-size: 0.72rem; color: var(--text-light); flex-wrap: wrap; justify-content: center; min-height: 16px; }
+  .save-status .dot { width: 8px; height: 8px; border-radius: 50%; background: #c0c0c0; transition: background 0.3s; }
+  .save-status.dirty .dot { background: var(--accent-red); animation: pulse 1.5s infinite; }
+  .save-status.clean .dot { background: var(--accent-green); }
+  .save-status .label { font-weight: 500; }
+  .save-status.dirty .label { color: var(--accent-red); }
+  .save-status.clean .label { color: var(--accent-green); }
+  .save-status .meta { color: var(--text-light); font-size: 0.7rem; }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+
+  @media (max-width: 480px) {
+    .container { padding-bottom: 140px; }
+    .save-status { font-size: 0.68rem; gap: 8px; }
+    .abtn { padding: 8px 14px; font-size: 0.78rem; }
+  }
 
   /* 토스트, 로딩, 확인 */
   .toast { position: fixed; top: 80px; left: 50%; transform: translateX(-50%) translateY(-20px); background: var(--header-brown); color: #fff; padding: 12px 24px; border-radius: 8px; font-size: 0.85rem; font-weight: 500; z-index: 1000; opacity: 0; transition: all 0.3s; pointer-events: none; }
@@ -147,18 +168,38 @@
   .cb button { padding: 10px 24px; border: none; border-radius: 8px; font-family: 'Noto Sans KR'; font-size: 0.85rem; font-weight: 700; cursor: pointer; }
   .cb .bc { background: #e8e0d2; color: var(--text-mid); }
   .cb .bd { background: var(--accent-red); color: #fff; }
+  .cb button:focus-visible { outline: 3px solid var(--accent-gold); outline-offset: 2px; }
+  .abtn:focus-visible { outline: 3px solid var(--header-brown); outline-offset: 2px; }
 </style>
 </head>
 <body>
 <div class="toast" id="toast"></div>
 <div class="lo" id="loading"><div class="sp"></div><p>PDF를 생성하고 있어요...</p></div>
-<div class="co" id="cOverlay">
+<div class="co" id="cOverlay" role="dialog" aria-modal="true" aria-labelledby="cMsg">
   <div class="cb">
     <p id="cMsg">이 장면을 삭제할까요?</p>
     <div class="sub">삭제하면 그림과 글이 모두 사라져요.</div>
     <div class="br">
-      <button class="bc" onclick="closeC()">취소</button>
-      <button class="bd" id="cDelBtn">삭제</button>
+      <button type="button" class="bc" onclick="closeC()">취소</button>
+      <button type="button" class="bd" id="cDelBtn">삭제</button>
+    </div>
+  </div>
+</div>
+
+<!-- 저장공간 사용 불가 경고 -->
+<div class="co" id="storageWarnOverlay" role="dialog" aria-modal="true" aria-labelledby="swTitle">
+  <div class="cb" style="max-width:380px;">
+    <p id="swTitle" style="color:var(--accent-red);">⚠️ 임시저장이 안 될 수 있어요</p>
+    <div class="sub" style="text-align:left;line-height:1.6;">
+      이 브라우저에서는 자동 임시저장이 동작하지 않아요.<br><br>
+      <strong>가능한 원인</strong><br>
+      • 사파리 <b>사생활 보호 모드</b><br>
+      • 브라우저 저장 공간 가득 참<br>
+      • 쿠키·사이트 데이터 차단<br><br>
+      <strong style="color:var(--accent-red);">⚠️ 작업한 내용은 반드시<br>📋 JSON 내보내기로 저장하세요!</strong>
+    </div>
+    <div class="br">
+      <button type="button" class="bd" style="background:var(--accent-red);" onclick="closeStorageWarn()">알겠어요</button>
     </div>
   </div>
 </div>
@@ -205,10 +246,58 @@
 </div>
 
 <div class="action-bar">
-  <button class="abtn b-save" onclick="saveLocal()">💾 임시저장</button>
-  <button class="abtn b-load" onclick="loadLocal()">📂 불러오기</button>
-  <button class="abtn b-json" onclick="expJSON()">📋 JSON</button>
-  <button class="abtn b-pdf" onclick="expPDF()">📄 PDF</button>
+  <div class="save-status clean" id="saveStatus" aria-live="polite">
+    <span class="dot"></span>
+    <span class="label" id="ssLabel">저장됨</span>
+    <span class="meta" id="ssMeta"></span>
+  </div>
+  <div class="action-row">
+    <button type="button" class="abtn b-save" onclick="saveLocal()" aria-label="현재 작업을 임시 저장">💾 임시저장</button>
+    <button type="button" class="abtn b-load" onclick="loadLocal()" aria-label="저장된 작업 불러오기">📂 불러오기</button>
+    <button type="button" class="abtn b-json" onclick="openExportModal()" aria-label="JSON 파일로 내보내기">📋 JSON</button>
+    <button type="button" class="abtn b-pdf" onclick="expPDF()" aria-label="PDF 파일로 내보내기">📄 PDF</button>
+    <button type="button" class="abtn b-reset" onclick="askReset()" aria-label="모든 내용을 지우고 새로 시작">🆕 새로 시작</button>
+  </div>
+</div>
+
+<!-- 내보내기 옵션 모달 -->
+<div class="co" id="expOverlay" role="dialog" aria-modal="true" aria-label="JSON 내보내기">
+  <div class="cb">
+    <p>JSON 내보내기</p>
+    <div class="sub">그림 데이터를 함께 저장할까요?<br>(그림 포함 시 파일이 커집니다)</div>
+    <div class="br" style="flex-direction:column;gap:8px;">
+      <button type="button" class="bd" style="background:var(--accent-green);" onclick="doExportJSON(true)">🎨 그림 포함</button>
+      <button type="button" class="bd" style="background:var(--accent-gold);" onclick="doExportJSON(false)">📝 텍스트만</button>
+      <button type="button" class="bc" onclick="closeExportModal()">취소</button>
+    </div>
+  </div>
+</div>
+
+<!-- 불러오기/시작 옵션 모달 -->
+<div class="co" id="loadOverlay" role="dialog" aria-modal="true" aria-label="시작 방법 선택">
+  <div class="cb">
+    <p>어떻게 시작할까요?</p>
+    <div class="sub">이어서 작업하거나, 새로 시작할 수 있어요</div>
+    <div class="br" style="flex-direction:column;gap:8px;">
+      <button type="button" class="bd" style="background:var(--accent-gold);" onclick="doLoadLocal()">💾 임시저장 이어가기</button>
+      <button type="button" class="bd" style="background:var(--accent-green);" onclick="doLoadJSONFile()">📁 JSON 파일 열기</button>
+      <button type="button" class="bd" style="background:var(--header-brown);" onclick="doNewFromLoad()">🆕 새 글 시작하기</button>
+      <button type="button" class="bc" onclick="closeLoadModal()">취소</button>
+    </div>
+  </div>
+</div>
+<input type="file" id="jsonFileInput" accept=".json,application/json" style="display:none;">
+
+<!-- 새로 시작 확인 모달 -->
+<div class="co" id="resetOverlay" role="dialog" aria-modal="true" aria-label="새로 시작 확인">
+  <div class="cb">
+    <p>정말 새로 시작할까요?</p>
+    <div class="sub">모든 글과 그림이 사라져요.<br>먼저 JSON으로 백업하는 것을 추천해요!</div>
+    <div class="br">
+      <button type="button" class="bc" onclick="closeReset()">취소</button>
+      <button type="button" class="bd" onclick="doReset()">새로 시작</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -218,6 +307,23 @@ const T={cover:{e:'📕',c:'#5c3d1a',l:'표지'},start:{e:'📖',c:'#4a5a2b',l:'
 /* ═══ 유틸 ═══ */
 let _u=0; const uid=()=>'p'+(++_u)+'_'+Date.now().toString(36);
 const esc=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+/* ═══ 캔버스 → JPEG dataURL (흰 배경 합성, 용량 60~70% ↓) ═══ */
+function cvToJPEG(cv,quality){
+  if(!cv)return null;
+  try{
+    const tmp=document.createElement('canvas');
+    tmp.width=cv.width;tmp.height=cv.height;
+    const tc=tmp.getContext('2d');
+    tc.fillStyle='#ffffff';
+    tc.fillRect(0,0,tmp.width,tmp.height);
+    tc.drawImage(cv,0,0);
+    return tmp.toDataURL('image/jpeg',quality||0.85);
+  }catch(e){
+    console.warn('cvToJPEG failed, fallback PNG',e);
+    return cv.toDataURL('image/png');
+  }
+}
 
 /* ═══ 기본 페이지 구조 ═══ */
 function defPages(){return[
@@ -288,6 +394,7 @@ function render(){
 
 function makeAddBtn(idx){
   const b=document.createElement('button');
+  b.type='button';
   b.className='add-btn';
   b.innerHTML='<span class="ic">+</span> 여기에 장면 추가';
   b.onclick=()=>addPage(idx);
@@ -313,9 +420,9 @@ function makeCard(p,idx){
         <span class="page-prompt">${esc(p.prompt)}</span>
       </div>
       <div class="acts">
-        <button onclick="mv('${p.id}',-1)" ${idx<=0||(idx===1&&pages[0].locked)?'disabled':''} title="위로">▲</button>
-        <button onclick="mv('${p.id}',1)" ${!canMoveDn?'disabled':''} title="아래로">▼</button>
-        ${!locked?`<button onclick="askDel('${p.id}')" title="삭제" style="color:#ffc0c0;">✕</button>`:''}
+        <button type="button" onclick="mv('${p.id}',-1)" ${idx<=0||(idx===1&&pages[0].locked)?'disabled':''} title="위로">▲</button>
+        <button type="button" onclick="mv('${p.id}',1)" ${!canMoveDn?'disabled':''} title="아래로">▼</button>
+        ${!locked?`<button type="button" onclick="askDel('${p.id}')" title="삭제" style="color:#ffc0c0;">✕</button>`:''}
       </div>
     </div>
     <div class="page-inner">
@@ -417,20 +524,27 @@ function initCv(id){
 }
 function mkTb(id){
   const tb=document.getElementById(`tb-${id}`);if(!tb)return;
-  tb.innerHTML=`<button class="at" data-tool="pen" onclick="stl('${id}','pen',this)">✏️ 펜</button><button data-tool="eraser" onclick="stl('${id}','eraser',this)">🧽</button><input type="color" value="#3a2e1e" onchange="cvCtx['${id}'].color=this.value"><input type="range" min="1" max="12" value="3" onchange="cvCtx['${id}'].size=+this.value"><label>📷<input type="file" accept="image/*" onchange="ldImg('${id}',this)"></label><button onclick="histUndo('${id}')" title="되돌리기 (Ctrl+Z)">↩️</button><button onclick="histRedo('${id}')" title="다시하기 (Ctrl+Y)">↪️</button><button onclick="clrCv('${id}')">🗑️</button>`;
+  tb.innerHTML=`<button type="button" class="at" data-tool="pen" onclick="stl('${id}','pen',this)">✏️ 펜</button><button type="button" data-tool="eraser" onclick="stl('${id}','eraser',this)">🧽</button><input type="color" value="#3a2e1e" onchange="cvCtx['${id}'].color=this.value"><input type="range" min="1" max="12" value="3" onchange="cvCtx['${id}'].size=+this.value"><label>📷<input type="file" accept="image/*" onchange="ldImg('${id}',this)"></label><button type="button" onclick="histUndo('${id}')" title="되돌리기 (Ctrl+Z)">↩️</button><button type="button" onclick="histRedo('${id}')" title="다시하기 (Ctrl+Y)">↪️</button><button type="button" onclick="clrCv('${id}')" title="전체 지우기">🗑️</button>`;
 }
 function stl(id,t,b){cvCtx[id].tool=t;b.parentElement.querySelectorAll('button[data-tool]').forEach(x=>x.classList.remove('at'));b.classList.add('at');}
-function clrCv(id){const cv=document.getElementById(`cv-${id}`);cv.getContext('2d').clearRect(0,0,cv.width,cv.height);const ph=document.getElementById(`ph-${id}`);if(ph)ph.classList.remove('hidden');cvCtx[id].has=false;delete cvData[id];}
+function clrCv(id){
+  if(!confirm('이 그림을 모두 지울까요?'))return;
+  const cv=document.getElementById(`cv-${id}`);
+  cv.getContext('2d').clearRect(0,0,cv.width,cv.height);
+  const ph=document.getElementById(`ph-${id}`);if(ph)ph.classList.remove('hidden');
+  cvCtx[id].has=false;delete cvData[id];
+  histSave(id);
+}
 function ldImg(id,inp){
   if(!inp.files[0])return;const r=new FileReader();
   r.onload=e=>{const cv=document.getElementById(`cv-${id}`),c=cv.getContext('2d'),img=new Image();
-  img.onload=()=>{c.clearRect(0,0,cv.width,cv.height);const s=Math.min((cv.width/2)/img.width,(cv.height/2)/img.height),w=img.width*s,h=img.height*s;c.drawImage(img,((cv.width/2)-w)/2,((cv.height/2)-h)/2,w,h);cvCtx[id].has=true;const ph=document.getElementById(`ph-${id}`);if(ph)ph.classList.add('hidden');cvData[id]=cv.toDataURL('image/png');};
+  img.onload=()=>{c.clearRect(0,0,cv.width,cv.height);const s=Math.min((cv.width/2)/img.width,(cv.height/2)/img.height),w=img.width*s,h=img.height*s;c.drawImage(img,((cv.width/2)-w)/2,((cv.height/2)-h)/2,w,h);cvCtx[id].has=true;const ph=document.getElementById(`ph-${id}`);if(ph)ph.classList.add('hidden');cvData[id]=cvToJPEG(cv,0.85);};
   img.src=e.target.result;};r.readAsDataURL(inp.files[0]);
 }
 function saveCvAll(){
   pages.forEach(p=>{if(p.type==='author')return;
     const cv=document.getElementById(`cv-${p.id}`);
-    if(cv&&cvCtx[p.id]?.has)cvData[p.id]=cv.toDataURL('image/png');
+    if(cv&&cvCtx[p.id]?.has)cvData[p.id]=cvToJPEG(cv,0.85);
     const tx=document.getElementById(`tx-${p.id}`);if(tx)p.text=tx.value;
   });
 }
@@ -449,9 +563,11 @@ function updateProg(){
 }
 
 /* ═══ 데이터 수집 ═══ */
+const SCHEMA_VERSION=2;
 function collect(){
   saveCvAll();
   return{
+    schemaVersion:SCHEMA_VERSION,
     meta:{school:'남부초등학교',grade:6,subject:'도덕',unit:'1단원 「나는 꿈 요리사」 × IB 학습자상 그림책 프로젝트',totalPages:pages.length,exportDate:new Date().toISOString()},
     student:{class:document.getElementById('i-class').value,name:document.getElementById('i-name').value,title:document.getElementById('i-title').value,protagonist:document.getElementById('i-prot').value,learnerProfile:document.getElementById('i-lp').value},
     pages:pages.filter(p=>p.type!=='author').map((p,i)=>({page:i+1,id:p.id,type:p.type,label:T[p.type].l,prompt:p.prompt,guide:p.guide,text:p.text,drawing:cvData[p.id]||null})),
@@ -461,15 +577,21 @@ function collect(){
   };
 }
 
-/* ═══ JSON 내보내기 ═══ */
-function expJSON(){
+/* ═══ JSON 내보내기 (모달 기반) ═══ */
+function openExportModal(){document.getElementById('expOverlay').classList.add('show');}
+function closeExportModal(){document.getElementById('expOverlay').classList.remove('show');}
+function expJSON(){openExportModal();} // 하위 호환
+function doExportJSON(includeDrawings){
+  closeExportModal();
   const d=collect();
-  const inc=confirm('그림 데이터 포함?\n확인: 포함 / 취소: 텍스트만');
-  if(!inc)d.pages.forEach(p=>p.drawing=null);
+  if(!includeDrawings)d.pages.forEach(p=>p.drawing=null);
   const b=new Blob([JSON.stringify(d,null,2)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(b);
-  a.download=`스토리보드_${d.student.class||''}반_${d.student.name||'이름없음'}.json`;
-  a.click();URL.revokeObjectURL(a.href);toast('JSON 저장 완료! 📋');
+  const safeName=(d.student.name||'이름없음').replace(/[\\/:*?"<>|]/g,'_');
+  const safeClass=(d.student.class||'').replace(/[\\/:*?"<>|]/g,'_');
+  a.download=`스토리보드_${safeClass}반_${safeName}.json`;
+  a.click();URL.revokeObjectURL(a.href);
+  toast(includeDrawings?'JSON 저장 완료 (그림 포함) 🎨':'JSON 저장 완료 (텍스트만) 📝');
 }
 
 /* ═══ PDF 내보내기 ═══ */
@@ -505,6 +627,7 @@ function pdfAuthor(d){
 }
 
 /* ═══ 로컬 저장/불러오기 ═══ */
+let _storageWarnShown=false;
 function saveLocal(silent=false){
   const d=collect();
   try{
@@ -517,16 +640,29 @@ function saveLocal(silent=false){
       localStorage.setItem('sb2',JSON.stringify(d));
       toast('⚠️ 그림 데이터가 너무 커서 텍스트만 저장됐어요. JSON으로 전체 저장해 두세요!');
     }catch{
-      toast('❌ 저장 실패! 저장 공간이 꽉 찼어요. JSON 내보내기로 백업하세요.');
+      // 완전 실패: 큰 모달로 강하게 경고 (한 번만)
+      if(!_storageWarnShown){
+        _storageWarnShown=true;
+        showStorageWarn();
+      }else{
+        toast('❌ 저장 실패! 📋 JSON으로 백업하세요.');
+      }
     }
   }
 }
 
-/* ═══ 자동저장 (5분마다) ═══ */
+/* ═══ 자동저장 (30초 주기 + 입력 후 5초 디바운스) ═══ */
 let _autoSaveTimer=null;
+let _autoSaveDebounce=null;
 function startAutoSave(){
   if(_autoSaveTimer)clearInterval(_autoSaveTimer);
-  _autoSaveTimer=setInterval(()=>{saveLocal(true);},5*60*1000);
+  // 주기 저장: 30초마다 dirty일 때만
+  _autoSaveTimer=setInterval(()=>{if(_dirty)saveLocal(true);},30*1000);
+}
+// 변경 감지 시 5초 후 디바운스 저장
+function scheduleDebouncedSave(){
+  clearTimeout(_autoSaveDebounce);
+  _autoSaveDebounce=setTimeout(()=>{if(_dirty)saveLocal(true);},5*1000);
 }
 function loadLocal(){
   const r=localStorage.getItem('sb2');
@@ -586,8 +722,258 @@ document.getElementById('i-lp').addEventListener('change',syncAuthorFields);
 document.getElementById('i-name').addEventListener('input',syncAuthorFields);
 document.querySelectorAll('.student-info input, .student-info select').forEach(el=>{el.addEventListener('input',updateProg);el.addEventListener('change',updateProg);});
 
+/* ═══ 변경 감지 + 저장 상태 인디케이터 ═══ */
+let _dirty=false;
+let _lastSavedAt=null;
+
+function fmtTime(d){
+  if(!d)return '';
+  const pad=n=>n.toString().padStart(2,'0');
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+function updateSaveStatus(){
+  const el=document.getElementById('saveStatus');
+  const lbl=document.getElementById('ssLabel');
+  const meta=document.getElementById('ssMeta');
+  if(!el||!lbl||!meta)return;
+  if(_dirty){
+    el.classList.remove('clean');el.classList.add('dirty');
+    lbl.textContent='저장 안 됨';
+    meta.textContent=_lastSavedAt?`마지막 저장: ${fmtTime(_lastSavedAt)}`:'아직 저장하지 않음';
+  }else{
+    el.classList.remove('dirty');el.classList.add('clean');
+    lbl.textContent='저장됨';
+    meta.textContent=_lastSavedAt?`마지막 저장: ${fmtTime(_lastSavedAt)}`:'';
+  }
+}
+function markDirty(){_dirty=true;updateSaveStatus();scheduleDebouncedSave();}
+function markClean(){_dirty=false;_lastSavedAt=new Date();updateSaveStatus();}
+
+// 입력 변경 시 dirty 표시 (전역 위임)
+document.addEventListener('input',e=>{
+  if(e.target.closest('.container, .co'))markDirty();
+});
+document.addEventListener('change',e=>{
+  if(e.target.closest('.container, .co'))markDirty();
+});
+
+// 새로고침 / 창 닫기 전 경고
+window.addEventListener('beforeunload',e=>{
+  if(!_dirty)return;
+  e.preventDefault();
+  e.returnValue='저장하지 않은 내용이 있어요. 정말 떠날까요?';
+  return e.returnValue;
+});
+
+/* ═══ saveLocal / restoreAll 마감 처리 확장 ═══ */
+const _origSaveLocal=saveLocal;
+saveLocal=function(silent=false){
+  _origSaveLocal(silent);
+  markClean();
+};
+const _origRestoreAll=restoreAll;
+restoreAll=function(d){
+  // 이전 세션의 캔버스 데이터/히스토리 정리 (ID 충돌·메모리 누수 방지)
+  Object.keys(cvData).forEach(k=>delete cvData[k]);
+  Object.keys(cvHist).forEach(k=>delete cvHist[k]);
+  _origRestoreAll(d);
+  // 불러오기 직후엔 localStorage와 동기 상태이므로 clean으로 표시
+  setTimeout(()=>{markClean();},300);
+};
+
+/* ═══ 캔버스 리사이즈 보호 (창 크기 변경 시 그림 보존) ═══ */
+let _resizeTimer=null;
+window.addEventListener('resize',()=>{
+  // 1) 현재 그림을 모두 dataURL로 백업
+  saveCvAll();
+  // 2) 디바운스 후 캔버스 재초기화 (cvData에서 다시 그려짐)
+  clearTimeout(_resizeTimer);
+  _resizeTimer=setTimeout(()=>{
+    pages.forEach(p=>{
+      if(p.type==='author')return;
+      const cv=document.getElementById(`cv-${p.id}`);
+      if(!cv)return;
+      const box=cv.parentElement.getBoundingClientRect();
+      cv.width=box.width*2;cv.height=box.height*2;
+      const c=cv.getContext('2d');c.scale(2,2);c.lineCap='round';c.lineJoin='round';
+      if(cvData[p.id]){
+        const img=new Image();
+        img.onload=()=>{c.drawImage(img,0,0,box.width,box.height);};
+        img.src=cvData[p.id];
+      }
+    });
+  },200);
+});
+
+/* ═══ 새로 시작 ═══ */
+function askReset(){document.getElementById('resetOverlay').classList.add('show');}
+function closeReset(){document.getElementById('resetOverlay').classList.remove('show');}
+function doReset(){
+  closeReset();
+  // 한 번 더 안전 백업: 기존 데이터를 sb2_backup 키에 보관
+  try{
+    const cur=localStorage.getItem('sb2');
+    if(cur)localStorage.setItem('sb2_backup_'+Date.now(),cur);
+  }catch{}
+  localStorage.removeItem('sb2');
+  pages=defPages();
+  Object.keys(cvData).forEach(k=>delete cvData[k]);
+  Object.keys(cvHist).forEach(k=>delete cvHist[k]);
+  ['i-class','i-name','i-title','i-prot','i-lp'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  render();
+  _lastSavedAt=null;_dirty=false;updateSaveStatus();
+  toast('새 작업을 시작합니다 🆕');
+}
+
+/* ═══ 불러오기 모달 + JSON 파일 열기 ═══ */
+function loadLocal(){document.getElementById('loadOverlay').classList.add('show');}
+function closeLoadModal(){document.getElementById('loadOverlay').classList.remove('show');}
+function doLoadLocal(){
+  closeLoadModal();
+  const r=localStorage.getItem('sb2');
+  if(!r){toast('저장된 임시저장 데이터가 없어요 📭');return;}
+  try{
+    restoreAll(JSON.parse(r));
+    toast('임시저장에서 불러왔어요! 📂');
+  }catch(e){toast('불러오기 실패 😢 (데이터 손상)');}
+}
+function doLoadJSONFile(){
+  closeLoadModal();
+  const inp=document.getElementById('jsonFileInput');
+  inp.value='';
+  inp.click();
+}
+function doNewFromLoad(){
+  closeLoadModal();
+  // 안전하게 한번 더 확인 (실수 방지)
+  askReset();
+}
+document.getElementById('jsonFileInput').addEventListener('change',function(){
+  if(!this.files||!this.files[0])return;
+  const f=this.files[0];
+  const r=new FileReader();
+  r.onload=ev=>{
+    try{
+      const d=JSON.parse(ev.target.result);
+      restoreAll(d);
+      const hasDrawings=Array.isArray(d.pages)&&d.pages.some(p=>p.drawing);
+      toast(hasDrawings?'JSON 불러오기 완료! 그림까지 복원됨 🎨':'JSON 불러오기 완료! (텍스트만) 📝');
+    }catch(err){
+      console.error(err);
+      toast('잘못된 JSON 파일이에요 😢');
+    }
+  };
+  r.readAsText(f);
+});
+
+/* ═══ 모달 접근성: ESC 닫기, Tab 포커스 트랩, 자동 포커스 ═══ */
+let _modalLastFocus=null;
+
+function showStorageWarn(){openAccessibleModal('storageWarnOverlay');}
+function closeStorageWarn(){closeAccessibleModal('storageWarnOverlay');}
+
+function openAccessibleModal(id){
+  const m=document.getElementById(id);if(!m)return;
+  _modalLastFocus=document.activeElement;
+  m.classList.add('show');
+  setTimeout(()=>{
+    const btn=m.querySelector('button:not([disabled])');
+    if(btn)try{btn.focus();}catch{}
+  },60);
+}
+function closeAccessibleModal(id){
+  const m=document.getElementById(id);if(!m)return;
+  m.classList.remove('show');
+  if(_modalLastFocus&&_modalLastFocus.focus){
+    try{_modalLastFocus.focus();}catch{}
+  }
+  _modalLastFocus=null;
+}
+
+// 기존 open/close 함수를 접근성 헬퍼로 래핑
+const _origAskDel=askDel;
+askDel=function(id){_origAskDel(id);_modalLastFocus=document.activeElement;setTimeout(()=>{const b=document.getElementById('cDelBtn');if(b)b.focus();},60);};
+const _origCloseC=closeC;
+closeC=function(){_origCloseC();if(_modalLastFocus){try{_modalLastFocus.focus();}catch{}_modalLastFocus=null;}};
+
+const _origOpenExp=openExportModal;
+openExportModal=function(){_modalLastFocus=document.activeElement;_origOpenExp();setTimeout(()=>{const b=document.querySelector('#expOverlay button:not([disabled])');if(b)b.focus();},60);};
+const _origCloseExp=closeExportModal;
+closeExportModal=function(){_origCloseExp();if(_modalLastFocus){try{_modalLastFocus.focus();}catch{}_modalLastFocus=null;}};
+
+const _origLoadLocal=loadLocal;
+loadLocal=function(){_modalLastFocus=document.activeElement;_origLoadLocal();setTimeout(()=>{const b=document.querySelector('#loadOverlay button:not([disabled])');if(b)b.focus();},60);};
+const _origCloseLoad=closeLoadModal;
+closeLoadModal=function(){_origCloseLoad();if(_modalLastFocus){try{_modalLastFocus.focus();}catch{}_modalLastFocus=null;}};
+
+const _origAskReset=askReset;
+askReset=function(){_modalLastFocus=document.activeElement;_origAskReset();setTimeout(()=>{const b=document.querySelector('#resetOverlay button:not([disabled])');if(b)b.focus();},60);};
+const _origCloseReset=closeReset;
+closeReset=function(){_origCloseReset();if(_modalLastFocus){try{_modalLastFocus.focus();}catch{}_modalLastFocus=null;}};
+
+// ESC: 가장 최근에 열린 모달 닫기
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){
+    const visible=[...document.querySelectorAll('.co.show')];
+    if(visible.length===0)return;
+    e.preventDefault();
+    const top=visible[visible.length-1];
+    top.classList.remove('show');
+    if(top.id==='cOverlay')_delId=null;
+    if(_modalLastFocus){try{_modalLastFocus.focus();}catch{}_modalLastFocus=null;}
+    return;
+  }
+  // Tab 포커스 트랩
+  if(e.key==='Tab'){
+    const visible=[...document.querySelectorAll('.co.show')];
+    if(visible.length===0)return;
+    const top=visible[visible.length-1];
+    const focusable=[...top.querySelectorAll('button:not([disabled])')];
+    if(focusable.length===0)return;
+    const first=focusable[0],last=focusable[focusable.length-1];
+    if(e.shiftKey&&document.activeElement===first){
+      e.preventDefault();last.focus();
+    }else if(!e.shiftKey&&document.activeElement===last){
+      e.preventDefault();first.focus();
+    }
+  }
+});
+
+/* ═══ 저장공간 가용성 체크 (사파리 시크릿/쿼터 차단 등) ═══ */
+function checkStorageAvailable(){
+  try{
+    const k='__sb_probe__';
+    localStorage.setItem(k,'1');
+    localStorage.removeItem(k);
+    return true;
+  }catch(e){return false;}
+}
+
 /* ═══ 초기 렌더 ═══ */
 render();
+
+/* ═══ 저장공간 사용 가능 여부 사전 점검 ═══ */
+if(!checkStorageAvailable()){
+  setTimeout(()=>{showStorageWarn();_storageWarnShown=true;},600);
+}
+
+/* ═══ 자동 복원: 페이지 열 때 localStorage 확인 ═══ */
+(function autoRestore(){
+  try{
+    const raw=localStorage.getItem('sb2');
+    if(!raw)return;
+    const d=JSON.parse(raw);
+    // 의미 있는 데이터(학생 이름/제목/장면 텍스트 중 하나라도)가 있을 때만 복원
+    const hasContent=
+      (d.student?.name&&d.student.name.trim())||
+      (d.student?.title&&d.student.title.trim())||
+      (Array.isArray(d.pages)&&d.pages.some(p=>p.text&&p.text.trim()));
+    if(!hasContent)return;
+    restoreAll(d);
+    setTimeout(()=>toast('이전 작업을 자동으로 불러왔어요 📂'),400);
+  }catch(e){console.warn('autoRestore failed',e);}
+})();
+
 startAutoSave();
 </script>
 </body>
