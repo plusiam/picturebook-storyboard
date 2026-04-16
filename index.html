@@ -47,14 +47,25 @@
 
   /* 학습자상 칩 그리드 */
   .lp-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-  .lp-chip { display: inline-flex; align-items: center; gap: 4px; padding: 8px 14px; border: 1.5px solid var(--border); border-radius: 22px; background: var(--input-bg); cursor: pointer; font-size: 0.82rem; font-weight: 500; color: var(--text-mid); transition: all 0.15s; min-height: 40px; user-select: none; }
+  .lp-chip { display: inline-flex; align-items: center; gap: 4px; padding: 8px 8px 8px 14px; border: 1.5px solid var(--border); border-radius: 22px; background: var(--input-bg); cursor: pointer; font-size: 0.82rem; font-weight: 500; color: var(--text-mid); transition: all 0.15s; min-height: 40px; user-select: none; position: relative; }
   .lp-chip:hover { border-color: var(--accent-gold); color: var(--accent-gold); transform: translateY(-1px); }
-  .lp-chip input[type="checkbox"] { position: absolute; width: 0; height: 0; opacity: 0; pointer-events: none; }
+  .lp-chip:focus-visible { outline: 3px solid var(--accent-gold); outline-offset: 2px; }
   .lp-chip.sel { background: var(--header-brown); color: #fff; border-color: var(--header-brown); box-shadow: 0 2px 8px rgba(92,61,26,0.25); font-weight: 700; }
-  .lp-chip.sel:hover { background: var(--accent-gold); border-color: var(--accent-gold); color: #fff; }
-  .lp-chip:focus-within { outline: 3px solid var(--accent-gold); outline-offset: 2px; }
-  .lp-count { font-size: 0.75rem; color: var(--text-light); margin-top: 8px; font-weight: 500; }
-  .lp-count.has { color: var(--accent-green); }
+  .lp-chip.sel:hover { background: #7a5228; border-color: #7a5228; color: #fff; }
+  .lp-chip.primary { background: linear-gradient(135deg,#e0b34f 0%,#c49a3c 60%,#a67f28 100%); border-color: var(--accent-gold); color: #fff; box-shadow: 0 4px 14px rgba(196,154,60,0.5); transform: scale(1.03); font-weight: 700; padding-left: 8px; }
+  .lp-chip.primary::before { content: '⭐'; font-size: 0.95em; margin-right: 2px; }
+  .lp-chip.primary:hover { background: linear-gradient(135deg,#edc158 0%,#d4a84a 60%,#b58d30 100%); border-color: var(--accent-gold); color: #fff; transform: scale(1.04); }
+
+  /* 대표 승격 버튼 (부가 선택일 때만 표시) */
+  .lp-star { width: 24px; height: 24px; border: none; background: rgba(255,255,255,0.22); color: #fff; border-radius: 50%; cursor: pointer; font-size: 0.72rem; display: none; align-items: center; justify-content: center; padding: 0; margin-left: 4px; transition: all 0.15s; }
+  .lp-chip.sel:not(.primary) .lp-star { display: inline-flex; opacity: 0.85; }
+  .lp-chip.sel:not(.primary) .lp-star:hover { opacity: 1; background: rgba(255,255,255,0.45); transform: scale(1.1); }
+  .lp-chip.sel:not(.primary) .lp-star:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+
+  .lp-count { font-size: 0.75rem; color: var(--text-light); margin-top: 8px; font-weight: 500; line-height: 1.5; }
+  .lp-count.has { color: var(--text-mid); }
+  .lp-count .lp-primary-txt { color: var(--accent-gold); font-weight: 700; }
+  .lp-count .lp-sec-txt { color: var(--text-light); }
 
   /* 진행률 */
   .progress-bar { margin-bottom: 16px; background: var(--card-bg); border-radius: var(--radius); padding: 14px 20px; box-shadow: var(--shadow); border: 1px solid var(--border); }
@@ -354,43 +365,143 @@ const LP_LIST=[
   ['🧘','균형 잡힌 사람'],
   ['🪞','성찰하는 사람'],
 ];
+/* 상태: 선택된 학습자상 + 대표 */
+const _lpState={selected:new Set(),primary:''};
+
 function buildLPGrid(){
   const g=document.getElementById('lpGrid');if(!g)return;
-  g.innerHTML=LP_LIST.map(([emo,nm])=>`<label class="lp-chip" data-name="${nm}"><input type="checkbox" value="${nm}"><span>${emo} ${nm}</span></label>`).join('');
-  g.querySelectorAll('input[type="checkbox"]').forEach(cb=>{
-    cb.addEventListener('change',()=>{
-      cb.closest('.lp-chip').classList.toggle('sel',cb.checked);
-      updateLPLabel();
-      if(typeof updateProg==='function')updateProg();
-      if(typeof syncAuthorFields==='function')syncAuthorFields();
-      if(typeof markDirty==='function')markDirty();
+  g.innerHTML=LP_LIST.map(([emo,nm])=>`
+    <div class="lp-chip" data-name="${nm}" role="checkbox" aria-checked="false" tabindex="0">
+      <span class="lp-text">${emo} ${nm}</span>
+      <button type="button" class="lp-star" tabindex="-1" aria-label="${nm}을(를) 대표 학습자상으로 선택" title="⭐ 대표로 선택">⭐</button>
+    </div>
+  `).join('');
+
+  g.querySelectorAll('.lp-chip').forEach(chip=>{
+    const nm=chip.dataset.name;
+    const star=chip.querySelector('.lp-star');
+
+    // 칩 클릭(⭐ 버튼 영역 제외) → 선택 토글
+    chip.addEventListener('click',e=>{
+      if(e.target.closest('.lp-star'))return;
+      toggleLP(nm);
+    });
+    // 키보드: Space/Enter → 토글
+    chip.addEventListener('keydown',e=>{
+      if((e.key===' '||e.key==='Enter')&&e.target===chip){
+        e.preventDefault();
+        toggleLP(nm);
+      }
+    });
+    // ⭐ 버튼 → 대표로 승격
+    star.addEventListener('click',e=>{
+      e.preventDefault();
+      e.stopPropagation();
+      promoteLP(nm);
     });
   });
+
+  refreshLPUI();
 }
-function getSelectedLPs(){
-  return [...document.querySelectorAll('#lpGrid input[type="checkbox"]:checked')].map(x=>x.value);
+
+function toggleLP(nm){
+  if(_lpState.selected.has(nm)){
+    _lpState.selected.delete(nm);
+    if(_lpState.primary===nm){
+      // 대표 해제 → 남은 부가 중 첫 번째를 자동 승격
+      const rest=[..._lpState.selected];
+      _lpState.primary=rest[0]||'';
+    }
+  }else{
+    _lpState.selected.add(nm);
+    // 첫 선택이면 자동 대표
+    if(!_lpState.primary)_lpState.primary=nm;
+  }
+  refreshLPUI();
+  fireLPChange();
 }
-function setSelectedLPs(arr){
-  const set=new Set(arr||[]);
-  document.querySelectorAll('#lpGrid input[type="checkbox"]').forEach(cb=>{
-    cb.checked=set.has(cb.value);
-    cb.closest('.lp-chip').classList.toggle('sel',cb.checked);
+
+function promoteLP(nm){
+  if(!_lpState.selected.has(nm))_lpState.selected.add(nm);
+  _lpState.primary=nm;
+  refreshLPUI();
+  fireLPChange();
+  // 승격 후 대표 칩에 포커스 이동 (시각 피드백)
+  setTimeout(()=>{
+    const chip=document.querySelector(`#lpGrid .lp-chip[data-name="${nm}"]`);
+    if(chip)try{chip.focus();}catch{}
+  },20);
+}
+
+function refreshLPUI(){
+  document.querySelectorAll('#lpGrid .lp-chip').forEach(chip=>{
+    const nm=chip.dataset.name;
+    const sel=_lpState.selected.has(nm);
+    const prim=_lpState.primary===nm;
+    chip.classList.toggle('sel',sel);
+    chip.classList.toggle('primary',prim);
+    chip.setAttribute('aria-checked',sel?'true':'false');
+    // ⭐ 버튼은 부가 선택일 때만 탭 가능
+    const star=chip.querySelector('.lp-star');
+    if(star)star.tabIndex=(sel&&!prim)?0:-1;
   });
   updateLPLabel();
 }
-function updateLPLabel(){
-  const arr=getSelectedLPs();
-  const el=document.getElementById('lpCount');
-  if(!el)return;
-  if(arr.length===0){
-    el.textContent='아직 선택 안 함';
-    el.classList.remove('has');
-  }else{
-    el.textContent=`✨ ${arr.length}개 선택: ${arr.join(' · ')}`;
-    el.classList.add('has');
-  }
+
+function fireLPChange(){
+  if(typeof updateProg==='function')updateProg();
+  if(typeof syncAuthorFields==='function')syncAuthorFields();
+  if(typeof markDirty==='function')markDirty();
 }
-function getLPString(){return getSelectedLPs().join(' · ');}
+
+function getSelectedLPs(){
+  const arr=[..._lpState.selected];
+  // 대표를 배열의 첫 번째로
+  if(_lpState.primary&&arr.includes(_lpState.primary)){
+    return [_lpState.primary,...arr.filter(x=>x!==_lpState.primary)];
+  }
+  return arr;
+}
+function getPrimaryLP(){return _lpState.primary||'';}
+
+function setSelectedLPs(arr,primary){
+  _lpState.selected=new Set(arr||[]);
+  if(primary&&_lpState.selected.has(primary)){
+    _lpState.primary=primary;
+  }else if(arr&&arr.length>0){
+    _lpState.primary=arr[0];
+  }else{
+    _lpState.primary='';
+  }
+  refreshLPUI();
+}
+
+function updateLPLabel(){
+  const el=document.getElementById('lpCount');if(!el)return;
+  const arr=getSelectedLPs();
+  if(arr.length===0){
+    el.innerHTML='아직 선택 안 함 <span style="opacity:.7;">(칩을 누르면 선택 · ⭐ 버튼으로 대표 지정)</span>';
+    el.classList.remove('has');
+    return;
+  }
+  el.classList.add('has');
+  const primary=_lpState.primary;
+  const others=arr.filter(x=>x!==primary);
+  let html='';
+  if(primary)html+=`<span class="lp-primary-txt">⭐ 대표: ${esc(primary)}</span>`;
+  if(others.length>0)html+=` <span class="lp-sec-txt">· 함께: ${esc(others.join(', '))}</span>`;
+  el.innerHTML=html;
+}
+
+function getLPString(){
+  const arr=getSelectedLPs();
+  if(arr.length===0)return '';
+  const primary=_lpState.primary;
+  if(!primary)return arr.join(' · ');
+  const others=arr.filter(x=>x!==primary);
+  if(others.length===0)return `⭐ ${primary}`;
+  return `⭐ ${primary} (+ ${others.join(', ')})`;
+}
 
 /* ═══ 유틸 ═══ */
 let _u=0; const uid=()=>'p'+(++_u)+'_'+Date.now().toString(36);
@@ -667,7 +778,7 @@ function collect(){
   return{
     schemaVersion:SCHEMA_VERSION,
     meta:{school:'남부초등학교',grade:6,subject:'도덕',unit:'1단원 「나는 꿈 요리사」 × IB 학습자상 그림책 프로젝트',totalPages:pages.length,exportDate:new Date().toISOString()},
-    student:{class:document.getElementById('i-class').value,name:document.getElementById('i-name').value,title:document.getElementById('i-title').value,protagonist:document.getElementById('i-prot').value,learnerProfiles:getSelectedLPs(),learnerProfile:getLPString()},
+    student:{class:document.getElementById('i-class').value,name:document.getElementById('i-name').value,title:document.getElementById('i-title').value,protagonist:document.getElementById('i-prot').value,learnerProfiles:getSelectedLPs(),learnerProfilePrimary:getPrimaryLP(),learnerProfile:getLPString()},
     pages:pages.filter(p=>p.type!=='author').map((p,i)=>({page:i+1,id:p.id,type:p.type,label:T[p.type].l,prompt:p.prompt,guide:p.guide,text:p.text,drawing:cvData[p.id]||null})),
     author:{name:document.getElementById('a-name')?.value||'',learnerProfile:document.getElementById('a-lp')?.value||'',message:document.getElementById('a-msg')?.value||'',dedicationTo:document.getElementById('a-ded')?.value||''},
     checklist:{lp:document.getElementById('chk1')?.checked,struct:document.getElementById('chk2')?.checked,climax:document.getElementById('chk3')?.checked,match:document.getElementById('chk4')?.checked},
@@ -772,14 +883,28 @@ function restoreAll(d){
   document.getElementById('i-name').value=d.student?.name||'';
   document.getElementById('i-title').value=d.student?.title||'';
   document.getElementById('i-prot').value=d.student?.protagonist||'';
-  // 학습자상: 배열(신) 또는 문자열(구) 둘 다 지원
+  // 학습자상: 배열(신) 또는 문자열(구) 둘 다 지원, 대표 복원
   let lps=[];
-  if(Array.isArray(d.student?.learnerProfiles))lps=d.student.learnerProfiles;
-  else if(typeof d.student?.learnerProfile==='string'&&d.student.learnerProfile){
-    // 구버전: " · " 또는 ", " 로 join된 경우 분리, 단일 값이면 그대로
-    lps=d.student.learnerProfile.split(/\s*[·,]\s*/).filter(Boolean);
+  let primary=d.student?.learnerProfilePrimary||'';
+  if(Array.isArray(d.student?.learnerProfiles)){
+    lps=d.student.learnerProfiles;
+  }else if(typeof d.student?.learnerProfile==='string'&&d.student.learnerProfile){
+    // ⭐ 접두 제거 후 파싱
+    const raw=d.student.learnerProfile.replace(/^⭐\s*/,'').trim();
+    // 포맷1: "대표 (+ 부가1, 부가2)"
+    const m=raw.match(/^(.+?)\s*\(\+\s*(.+?)\)$/);
+    if(m){
+      const p=m[1].trim();
+      const rest=m[2].split(/\s*,\s*/).map(x=>x.trim()).filter(Boolean);
+      lps=[p,...rest];
+      if(!primary)primary=p;
+    }else{
+      // 포맷2: " · " 또는 "," 구분
+      lps=raw.split(/\s*[·,]\s*/).filter(Boolean);
+      if(!primary&&lps.length>0)primary=lps[0];
+    }
   }
-  setSelectedLPs(lps);
+  setSelectedLPs(lps,primary);
   if(d._ps)pages=d._ps; else{pages=defPages();d.pages?.forEach((dp,i)=>{if(pages[i])pages[i].text=dp.text||'';});}
   d.pages?.forEach(dp=>{if(dp.drawing&&dp.id)cvData[dp.id]=dp.drawing;});
   render();
