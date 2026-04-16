@@ -787,19 +787,24 @@ function collect(){
 }
 
 /* ═══ 내보내기 파일명 생성 헬퍼 ═══
-   예) 스토리보드_3반_김철수_2026-04-16_1432.json
-       스토리보드_김철수_2026-04-16_1432.pdf (반 없을 때)
-       스토리보드_이름없음_2026-04-16_1432.json (이름 없을 때) */
+   짧은 형태 + 제목 포함
+   예) 스토리보드_3반_김철수_나의꿈요리사_260416_1432.json
+       스토리보드_김철수_나의꿈_260416_1432.pdf (반 없을 때)
+       스토리보드_3반_김철수_260416_1432.json (제목 없을 때) */
 function buildExportFilename(d,ext){
   const sanitize=s=>String(s||'').replace(/[\\/:*?"<>|\s]+/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'');
+  const clip=(s,n)=>s.length>n?s.slice(0,n):s;
   const name=sanitize(d.student?.name)||'이름없음';
   const cls=sanitize(d.student?.class);
+  const title=clip(sanitize(d.student?.title),20); // 제목은 최대 20자
   const now=new Date();
   const pad=n=>n.toString().padStart(2,'0');
-  const dateStr=`${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
+  const yy=now.getFullYear().toString().slice(-2);
+  const dateStr=`${yy}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
   const parts=['스토리보드'];
   if(cls)parts.push(`${cls}반`);
   parts.push(name);
+  if(title)parts.push(title);
   parts.push(dateStr);
   return `${parts.join('_')}.${ext}`;
 }
