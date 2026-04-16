@@ -43,6 +43,18 @@
   .info-field label { display: block; font-size: 0.75rem; color: var(--text-light); margin-bottom: 4px; font-weight: 500; }
   .info-field input, .info-field select { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem; font-family: 'Gaegu', cursive; font-weight: 700; background: var(--input-bg); color: var(--text-dark); }
   .info-field input:focus, .info-field select:focus { outline: none; border-color: var(--accent-gold); box-shadow: 0 0 0 3px rgba(196,154,60,0.15); }
+  .info-field.full { grid-column: 1 / -1; }
+
+  /* 학습자상 칩 그리드 */
+  .lp-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .lp-chip { display: inline-flex; align-items: center; gap: 4px; padding: 8px 14px; border: 1.5px solid var(--border); border-radius: 22px; background: var(--input-bg); cursor: pointer; font-size: 0.82rem; font-weight: 500; color: var(--text-mid); transition: all 0.15s; min-height: 40px; user-select: none; }
+  .lp-chip:hover { border-color: var(--accent-gold); color: var(--accent-gold); transform: translateY(-1px); }
+  .lp-chip input[type="checkbox"] { position: absolute; width: 0; height: 0; opacity: 0; pointer-events: none; }
+  .lp-chip.sel { background: var(--header-brown); color: #fff; border-color: var(--header-brown); box-shadow: 0 2px 8px rgba(92,61,26,0.25); font-weight: 700; }
+  .lp-chip.sel:hover { background: var(--accent-gold); border-color: var(--accent-gold); color: #fff; }
+  .lp-chip:focus-within { outline: 3px solid var(--accent-gold); outline-offset: 2px; }
+  .lp-count { font-size: 0.75rem; color: var(--text-light); margin-top: 8px; font-weight: 500; }
+  .lp-count.has { color: var(--accent-green); }
 
   /* 진행률 */
   .progress-bar { margin-bottom: 16px; background: var(--card-bg); border-radius: var(--radius); padding: 14px 20px; box-shadow: var(--shadow); border: 1px solid var(--border); }
@@ -239,21 +251,10 @@
       <div class="info-field"><label>이름</label><input type="text" id="i-name" placeholder="이름을 써요"></div>
       <div class="info-field"><label>제목</label><input type="text" id="i-title" placeholder="나의 그림책 제목"></div>
       <div class="info-field"><label>주인공</label><input type="text" id="i-prot" placeholder="주인공 이름"></div>
-      <div class="info-field">
-        <label>나의 학습자상</label>
-        <select id="i-lp">
-          <option value="">선택하세요</option>
-          <option value="탐구하는 사람">탐구하는 사람</option>
-          <option value="지식이 있는 사람">지식이 있는 사람</option>
-          <option value="사고하는 사람">사고하는 사람</option>
-          <option value="소통하는 사람">소통하는 사람</option>
-          <option value="원칙을 지키는 사람">원칙을 지키는 사람</option>
-          <option value="열린 마음을 가진 사람">열린 마음을 가진 사람</option>
-          <option value="배려하는 사람">배려하는 사람</option>
-          <option value="도전하는 사람">도전하는 사람</option>
-          <option value="균형 잡힌 사람">균형 잡힌 사람</option>
-          <option value="성찰하는 사람">성찰하는 사람</option>
-        </select>
+      <div class="info-field full">
+        <label>나의 학습자상 <span style="color:var(--accent-red);font-size:0.7rem;">(여러 개 선택 가능!)</span></label>
+        <div class="lp-grid" id="lpGrid" role="group" aria-label="IB 학습자상 선택"></div>
+        <div class="lp-count" id="lpCount">아직 선택 안 함</div>
       </div>
     </div>
   </div>
@@ -339,6 +340,57 @@
 <script>
 /* ═══ 타입 정의 ═══ */
 const T={cover:{e:'📕',c:'#5c3d1a',l:'표지'},start:{e:'📖',c:'#4a5a2b',l:'시작'},middle:{e:'✨',c:'#8b6914',l:'중간'},climax:{e:'⭐',c:'#a94442',l:'빛나는 순간'},end:{e:'🌈',c:'#2d6a4f',l:'끝'},author:{e:'✍️',c:'#4a5a2b',l:'작가 소개'}};
+
+/* ═══ IB 학습자상 목록 (여러 개 선택 가능) ═══ */
+const LP_LIST=[
+  ['🔍','탐구하는 사람'],
+  ['📚','지식이 있는 사람'],
+  ['💭','사고하는 사람'],
+  ['💬','소통하는 사람'],
+  ['⚖️','원칙을 지키는 사람'],
+  ['🌍','열린 마음을 가진 사람'],
+  ['💝','배려하는 사람'],
+  ['🚀','도전하는 사람'],
+  ['🧘','균형 잡힌 사람'],
+  ['🪞','성찰하는 사람'],
+];
+function buildLPGrid(){
+  const g=document.getElementById('lpGrid');if(!g)return;
+  g.innerHTML=LP_LIST.map(([emo,nm])=>`<label class="lp-chip" data-name="${nm}"><input type="checkbox" value="${nm}"><span>${emo} ${nm}</span></label>`).join('');
+  g.querySelectorAll('input[type="checkbox"]').forEach(cb=>{
+    cb.addEventListener('change',()=>{
+      cb.closest('.lp-chip').classList.toggle('sel',cb.checked);
+      updateLPLabel();
+      if(typeof updateProg==='function')updateProg();
+      if(typeof syncAuthorFields==='function')syncAuthorFields();
+      if(typeof markDirty==='function')markDirty();
+    });
+  });
+}
+function getSelectedLPs(){
+  return [...document.querySelectorAll('#lpGrid input[type="checkbox"]:checked')].map(x=>x.value);
+}
+function setSelectedLPs(arr){
+  const set=new Set(arr||[]);
+  document.querySelectorAll('#lpGrid input[type="checkbox"]').forEach(cb=>{
+    cb.checked=set.has(cb.value);
+    cb.closest('.lp-chip').classList.toggle('sel',cb.checked);
+  });
+  updateLPLabel();
+}
+function updateLPLabel(){
+  const arr=getSelectedLPs();
+  const el=document.getElementById('lpCount');
+  if(!el)return;
+  if(arr.length===0){
+    el.textContent='아직 선택 안 함';
+    el.classList.remove('has');
+  }else{
+    el.textContent=`✨ ${arr.length}개 선택: ${arr.join(' · ')}`;
+    el.classList.add('has');
+  }
+}
+function getLPString(){return getSelectedLPs().join(' · ');}
 
 /* ═══ 유틸 ═══ */
 let _u=0; const uid=()=>'p'+(++_u)+'_'+Date.now().toString(36);
@@ -602,7 +654,7 @@ function updateProg(){
   if(document.getElementById('i-class').value.trim())f++;
   if(document.getElementById('i-name').value.trim())f++;
   if(document.getElementById('i-title').value.trim())f++;
-  if(document.getElementById('i-lp').value)f++;
+  if(getSelectedLPs().length>0)f++;
   const pct=Math.round(f/tot*100);
   document.getElementById('pp').textContent=pct+'%';
   document.getElementById('pf').style.width=pct+'%';
@@ -615,7 +667,7 @@ function collect(){
   return{
     schemaVersion:SCHEMA_VERSION,
     meta:{school:'남부초등학교',grade:6,subject:'도덕',unit:'1단원 「나는 꿈 요리사」 × IB 학습자상 그림책 프로젝트',totalPages:pages.length,exportDate:new Date().toISOString()},
-    student:{class:document.getElementById('i-class').value,name:document.getElementById('i-name').value,title:document.getElementById('i-title').value,protagonist:document.getElementById('i-prot').value,learnerProfile:document.getElementById('i-lp').value},
+    student:{class:document.getElementById('i-class').value,name:document.getElementById('i-name').value,title:document.getElementById('i-title').value,protagonist:document.getElementById('i-prot').value,learnerProfiles:getSelectedLPs(),learnerProfile:getLPString()},
     pages:pages.filter(p=>p.type!=='author').map((p,i)=>({page:i+1,id:p.id,type:p.type,label:T[p.type].l,prompt:p.prompt,guide:p.guide,text:p.text,drawing:cvData[p.id]||null})),
     author:{name:document.getElementById('a-name')?.value||'',learnerProfile:document.getElementById('a-lp')?.value||'',message:document.getElementById('a-msg')?.value||'',dedicationTo:document.getElementById('a-ded')?.value||''},
     checklist:{lp:document.getElementById('chk1')?.checked,struct:document.getElementById('chk2')?.checked,climax:document.getElementById('chk3')?.checked,match:document.getElementById('chk4')?.checked},
@@ -720,7 +772,14 @@ function restoreAll(d){
   document.getElementById('i-name').value=d.student?.name||'';
   document.getElementById('i-title').value=d.student?.title||'';
   document.getElementById('i-prot').value=d.student?.protagonist||'';
-  document.getElementById('i-lp').value=d.student?.learnerProfile||'';
+  // 학습자상: 배열(신) 또는 문자열(구) 둘 다 지원
+  let lps=[];
+  if(Array.isArray(d.student?.learnerProfiles))lps=d.student.learnerProfiles;
+  else if(typeof d.student?.learnerProfile==='string'&&d.student.learnerProfile){
+    // 구버전: " · " 또는 ", " 로 join된 경우 분리, 단일 값이면 그대로
+    lps=d.student.learnerProfile.split(/\s*[·,]\s*/).filter(Boolean);
+  }
+  setSelectedLPs(lps);
   if(d._ps)pages=d._ps; else{pages=defPages();d.pages?.forEach((dp,i)=>{if(pages[i])pages[i].text=dp.text||'';});}
   d.pages?.forEach(dp=>{if(dp.drawing&&dp.id)cvData[dp.id]=dp.drawing;});
   render();
@@ -761,10 +820,9 @@ function toast(m){const t=document.getElementById('toast');t.textContent=m;t.cla
 
 // 학습자상·이름 동기화 — render() 이후 DOM이 생성된 시점에 안전하게 적용
 function syncAuthorFields(){
-  const alp=document.getElementById('a-lp');if(alp)alp.value=document.getElementById('i-lp').value;
+  const alp=document.getElementById('a-lp');if(alp)alp.value=getLPString();
   const anm=document.getElementById('a-name');if(anm)anm.value=document.getElementById('i-name').value;
 }
-document.getElementById('i-lp').addEventListener('change',syncAuthorFields);
 document.getElementById('i-name').addEventListener('input',syncAuthorFields);
 document.querySelectorAll('.student-info input, .student-info select').forEach(el=>{el.addEventListener('input',updateProg);el.addEventListener('change',updateProg);});
 
@@ -1022,7 +1080,8 @@ function doReset(){
   pages=defPages();
   Object.keys(cvData).forEach(k=>delete cvData[k]);
   Object.keys(cvHist).forEach(k=>delete cvHist[k]);
-  ['i-class','i-name','i-title','i-prot','i-lp'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['i-class','i-name','i-title','i-prot'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  setSelectedLPs([]);
   render();
   _lastSavedAt=null;_dirty=false;updateSaveStatus();
   toast('새 작업을 시작합니다 🆕');
@@ -1153,6 +1212,9 @@ function checkStorageAvailable(){
     return true;
   }catch(e){return false;}
 }
+
+/* ═══ 학습자상 칩 그리드 초기화 ═══ */
+buildLPGrid();
 
 /* ═══ 초기 렌더 ═══ */
 render();
